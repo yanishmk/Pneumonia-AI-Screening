@@ -6,6 +6,20 @@ const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024;
 
 export const runtime = "nodejs";
 
+async function readApiPayload<T>(response: Response): Promise<T | ApiError> {
+  const raw = await response.text();
+
+  if (!raw.trim()) {
+    return { error: `Empty response from backend (${response.status} ${response.statusText}).` };
+  }
+
+  try {
+    return JSON.parse(raw) as T | ApiError;
+  } catch {
+    return { error: `Backend returned a non-JSON response (${response.status} ${response.statusText}).` };
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -37,7 +51,7 @@ export async function POST(request: Request) {
       body: forwardFormData
     });
 
-    const payload = (await response.json()) as PredictionResult | ApiError;
+    const payload = await readApiPayload<PredictionResult>(response);
 
     if (!response.ok) {
       return NextResponse.json<ApiError>(
