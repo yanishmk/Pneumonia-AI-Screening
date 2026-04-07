@@ -2,8 +2,8 @@
 
 Full-stack prototype for pneumonia detection from chest X-ray images.
 
-The reference model for this workspace is the CNN from your notebook:
-`xray_pneumonia_final_(4) (2).ipynb`
+The reference model for this workspace is the CNN from notebook:
+`xray_pneumonia_final
 
 ## Folder Structure
 
@@ -14,7 +14,7 @@ pneumonia-ai-workspace/
     requirements.txt
     .env.example
     README.md
-    pneumonia_cnn_model.keras   # add your trained model here
+    pneumonia_cnn_model.keras  
   frontend/
     app/
       api/
@@ -57,9 +57,6 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Make sure `pneumonia_cnn_model.keras` is in `backend/`, or set `MODEL_PATH`.
-This file should be the exported model from your notebook.
-
 ## Run Frontend
 
 ```powershell
@@ -92,11 +89,7 @@ It auto-detects the final Keras `Conv2D` layer. If your model needs a specific l
 GRADCAM_LAYER=your_conv_layer_name
 ```
 
-If you need to override the image size for another model, set:
 
-```text
-MODEL_IMAGE_SIZE=150
-```
 
 ## Notes
 
