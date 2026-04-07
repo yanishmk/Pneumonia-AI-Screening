@@ -94,3 +94,21 @@ GRADCAM_LAYER=your_conv_layer_name
 ## Notes
 
 This project is for educational prototyping only. It is not a medical diagnosis system.
+
+## Deployment
+
+Recommended setup:
+
+- Frontend on Vercel
+- Backend on Render
+
+Suggested backend settings on Render:
+
+- Root directory: `backend`
+- Build command: `pip install -r requirements.txt`
+- Start command: `gunicorn app:app`
+
+Suggested frontend settings on Vercel:
+
+- Root directory: `frontend`
+- Environment variable: `FLASK_API_URL=https://your-render-backend.onrender.com`
