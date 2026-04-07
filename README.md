@@ -107,7 +107,7 @@ Suggested backend settings on Render:
 - Root directory: `backend`
 - Build command: `pip install -r requirements.txt`
 - Start command: `gunicorn app:app`
-- Python version: `3.11.11` via `backend/runtime.txt`
+- Python version: `3.11.11` via `backend/.python-version`
 
 Suggested frontend settings on Vercel:
 
