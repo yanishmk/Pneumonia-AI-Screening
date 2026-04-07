@@ -118,9 +118,10 @@ export default function HomePage() {
     });
 
     const payload = (await response.json()) as T | ApiError;
+    const apiError = payload as ApiError;
 
     if (!response.ok) {
-      throw new Error("error" in payload ? payload.error : "Request failed.");
+      throw new Error(typeof apiError.error === "string" ? apiError.error : "Request failed.");
     }
 
     return payload as T;
