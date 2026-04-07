@@ -1,0 +1,103 @@
+# Pneumonia Detection AI Web App
+
+Full-stack prototype for pneumonia detection from chest X-ray images.
+
+The reference model for this workspace is the CNN from your notebook:
+`xray_pneumonia_final_(4) (2).ipynb`
+
+## Folder Structure
+
+```text
+pneumonia-ai-workspace/
+  backend/
+    app.py
+    requirements.txt
+    .env.example
+    README.md
+    pneumonia_cnn_model.keras   # add your trained model here
+  frontend/
+    app/
+      api/
+        predict/
+          route.ts
+      globals.css
+      layout.tsx
+      page.tsx
+    lib/
+      types.ts
+    package.json
+    tsconfig.json
+    next.config.mjs
+    .env.local.example
+    README.md
+```
+
+## How It Works
+
+1. The user uploads a chest X-ray in the Next.js UI.
+2. `frontend/app/api/predict/route.ts` forwards the uploaded file to Flask.
+3. Flask preprocesses the image as grayscale, `150x150`, normalized to `[0, 1]`, shaped as `(1, 150, 150, 1)`.
+4. TensorFlow/Keras returns probability of class `1`, which is `Normal`.
+5. The backend applies threshold `0.45`.
+
+Class mapping:
+
+```text
+0 -> Pneumonia
+1 -> Normal
+```
+
+## Run Backend
+
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python app.py
+```
+
+Make sure `pneumonia_cnn_model.keras` is in `backend/`, or set `MODEL_PATH`.
+This file should be the exported model from your notebook.
+
+## Run Frontend
+
+```powershell
+cd frontend
+copy .env.local.example .env.local
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000`.
+
+## API Response
+
+```json
+{
+  "label": "Normal",
+  "predicted_class": 1,
+  "probability_normal": 0.92,
+  "threshold": 0.45
+}
+```
+
+## Optional Grad-CAM
+
+The backend also includes `POST /gradcam`. It accepts the same `multipart/form-data` upload and returns `gradcam_image_base64`.
+
+It auto-detects the final Keras `Conv2D` layer. If your model needs a specific layer, set:
+
+```text
+GRADCAM_LAYER=your_conv_layer_name
+```
+
+If you need to override the image size for another model, set:
+
+```text
+MODEL_IMAGE_SIZE=150
+```
+
+## Notes
+
+This project is for educational prototyping only. It is not a medical diagnosis system.
