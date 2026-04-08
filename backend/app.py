@@ -3,38 +3,53 @@ from __future__ import annotations
 import base64
 import os
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import cv2
 import numpy as np
-import tensorflow as tf
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from werkzeug.exceptions import BadRequest, HTTPException
+
+if TYPE_CHECKING:
+    import tensorflow as tf
 
 
 MODEL_IMAGE_SIZE = int(os.getenv("MODEL_IMAGE_SIZE", "150"))
 IMAGE_SIZE = (MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE)
 THRESHOLD = float(os.getenv("PREDICTION_THRESHOLD", "0.45"))
 MODEL_PATH = Path(os.getenv("MODEL_PATH", "pneumonia_cnn_model.keras"))
-_MODEL: tf.keras.Model | None = None
+_TF = None
+_MODEL = None
 
 
 app = Flask(__name__)
 CORS(app)
 
 
-def load_keras_model() -> tf.keras.Model:
+def get_tf():
+    global _TF
+
+    if _TF is None:
+        import tensorflow as tf
+
+        _TF = tf
+
+    return _TF
+
+
+def load_keras_model():
     if not MODEL_PATH.exists():
         raise FileNotFoundError(
             f"Model file not found at '{MODEL_PATH.resolve()}'. "
             "Place pneumonia_cnn_model.keras in the backend folder or set MODEL_PATH."
         )
 
+    tf = get_tf()
     return tf.keras.models.load_model(MODEL_PATH)
 
 
-def get_model() -> tf.keras.Model:
+def get_model():
     global _MODEL
 
     if _MODEL is None:
@@ -124,6 +139,8 @@ def classify(probability_normal: float) -> tuple[int, str]:
 
 
 def get_last_conv_layer_name() -> str:
+    tf = get_tf()
+
     for layer in reversed(get_model().layers):
         if isinstance(layer, tf.keras.layers.Conv2D):
             return layer.name
@@ -131,7 +148,8 @@ def get_last_conv_layer_name() -> str:
     raise RuntimeError("Grad-CAM requires a model with at least one Conv2D layer.")
 
 
-def build_gradcam_model(layer_name: str) -> tf.keras.Model:
+def build_gradcam_model(layer_name: str):
+    tf = get_tf()
     model = get_model()
     inputs = tf.keras.Input(shape=model.input_shape[1:], name="gradcam_input")
     x = inputs
@@ -152,6 +170,7 @@ def build_gradcam_model(layer_name: str) -> tf.keras.Model:
 
 
 def generate_gradcam_overlay(file_bytes: bytes, target_class: int | None = None) -> tuple[str, dict[str, Any]]:
+    tf = get_tf()
     image_bgr = decode_image(file_bytes)
     grayscale = validate_xray_candidate(image_bgr)
 
