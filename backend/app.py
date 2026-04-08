@@ -10,13 +10,14 @@ import numpy as np
 import tensorflow as tf
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from werkzeug.exceptions import BadRequest
+from werkzeug.exceptions import BadRequest, HTTPException
 
 
 MODEL_IMAGE_SIZE = int(os.getenv("MODEL_IMAGE_SIZE", "150"))
 IMAGE_SIZE = (MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE)
 THRESHOLD = float(os.getenv("PREDICTION_THRESHOLD", "0.45"))
 MODEL_PATH = Path(os.getenv("MODEL_PATH", "pneumonia_cnn_model.keras"))
+_MODEL: tf.keras.Model | None = None
 
 
 app = Flask(__name__)
@@ -33,7 +34,13 @@ def load_keras_model() -> tf.keras.Model:
     return tf.keras.models.load_model(MODEL_PATH)
 
 
-model = load_keras_model()
+def get_model() -> tf.keras.Model:
+    global _MODEL
+
+    if _MODEL is None:
+        _MODEL = load_keras_model()
+
+    return _MODEL
 
 
 def decode_image(file_bytes: bytes) -> np.ndarray:
@@ -117,7 +124,7 @@ def classify(probability_normal: float) -> tuple[int, str]:
 
 
 def get_last_conv_layer_name() -> str:
-    for layer in reversed(model.layers):
+    for layer in reversed(get_model().layers):
         if isinstance(layer, tf.keras.layers.Conv2D):
             return layer.name
 
@@ -125,6 +132,7 @@ def get_last_conv_layer_name() -> str:
 
 
 def build_gradcam_model(layer_name: str) -> tf.keras.Model:
+    model = get_model()
     inputs = tf.keras.Input(shape=model.input_shape[1:], name="gradcam_input")
     x = inputs
     conv_outputs = None
@@ -204,8 +212,21 @@ def health() -> tuple[Any, int]:
         {
             "status": "ok",
             "model_path": str(MODEL_PATH),
+            "model_loaded": _MODEL is not None,
+            "model_exists": MODEL_PATH.exists(),
             "image_size": MODEL_IMAGE_SIZE,
             "threshold": THRESHOLD,
+        }
+    ), 200
+
+
+@app.get("/")
+def index() -> tuple[Any, int]:
+    return jsonify(
+        {
+            "service": "Pneumonia AI Screening API",
+            "status": "ok",
+            "available_endpoints": ["/health", "/predict", "/gradcam"],
         }
     ), 200
 
@@ -221,7 +242,7 @@ def predict() -> tuple[Any, int]:
         raise BadRequest("No file was selected.")
 
     image = preprocess_image(uploaded_file.read())
-    prediction = model.predict(image, verbose=0)
+    prediction = get_model().predict(image, verbose=0)
     probability_normal = extract_probability_normal(prediction)
     predicted_class, label = classify(probability_normal)
 
@@ -259,6 +280,11 @@ def gradcam() -> tuple[Any, int]:
 @app.errorhandler(BadRequest)
 def handle_bad_request(error: BadRequest) -> tuple[Any, int]:
     return jsonify({"error": error.description}), 400
+
+
+@app.errorhandler(HTTPException)
+def handle_http_exception(error: HTTPException) -> tuple[Any, int]:
+    return jsonify({"error": error.description}), error.code or 500
 
 
 @app.errorhandler(Exception)

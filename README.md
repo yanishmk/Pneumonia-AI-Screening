@@ -119,3 +119,14 @@ Suggested frontend settings on Vercel:
 
 - Root directory: `frontend`
 - Environment variable: `FLASK_API_URL=https://your-render-backend.onrender.com`
+
+Suggested backend settings on Railway:
+
+- Root directory: `backend`
+- Start command: `gunicorn app:app --bind 0.0.0.0:$PORT --timeout 300 --workers 1`
+- Healthcheck path: `/health`
+- Environment variables:
+  - `MODEL_PATH=pneumonia_cnn_model.keras`
+  - `MODEL_IMAGE_SIZE=150`
+  - `PREDICTION_THRESHOLD=0.45`
+  - `FLASK_DEBUG=0`

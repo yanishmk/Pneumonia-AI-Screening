@@ -33,6 +33,7 @@ Notebook model assumptions:
 ## Endpoints
 
 - `GET /health`
+- `GET /`
 - `POST /predict`
 - `POST /gradcam`
 
@@ -48,3 +49,25 @@ Notebook model assumptions:
 ```
 
 `POST /gradcam` accepts the same `file` field and returns a base64 PNG overlay. It auto-detects the last `Conv2D` layer, or you can set `GRADCAM_LAYER`.
+
+## Railway Deployment
+
+Railway can deploy this backend directly from GitHub.
+
+Recommended settings:
+
+- Root Directory: `backend`
+- Start Command: `gunicorn app:app --bind 0.0.0.0:$PORT --timeout 300 --workers 1`
+- Healthcheck Path: `/health`
+
+Recommended environment variables:
+
+- `MODEL_PATH=pneumonia_cnn_model.keras`
+- `MODEL_IMAGE_SIZE=150`
+- `PREDICTION_THRESHOLD=0.45`
+- `FLASK_DEBUG=0`
+
+Notes:
+
+- Railway injects the `PORT` variable automatically.
+- The model now loads lazily on the first prediction request to reduce startup pressure.
