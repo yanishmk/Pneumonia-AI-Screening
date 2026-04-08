@@ -1,6 +1,7 @@
 # Pneumonia Detection Next.js Frontend
 
-The frontend sends uploads to `app/api/predict/route.ts`, which forwards them to Flask.
+The frontend can call Flask directly through `NEXT_PUBLIC_FLASK_API_URL`.
+If this variable is not set, it falls back to the internal Next.js proxy routes in `app/api/`.
 
 ## Setup
 
@@ -20,5 +21,5 @@ http://127.0.0.1:5000
 To change it, edit `.env.local`:
 
 ```text
-FLASK_API_URL=http://127.0.0.1:5000
+NEXT_PUBLIC_FLASK_API_URL=http://127.0.0.1:5000
 ```

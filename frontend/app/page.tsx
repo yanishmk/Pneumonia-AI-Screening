@@ -3,6 +3,8 @@
 import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { ApiError, GradcamResult, PredictionResult } from "@/lib/types";
 
+const PUBLIC_BACKEND_URL = process.env.NEXT_PUBLIC_FLASK_API_URL?.replace(/\/$/, "");
+
 function formatPercent(value: number) {
   return new Intl.NumberFormat("en", {
     style: "percent",
@@ -126,7 +128,9 @@ export default function HomePage() {
     const formData = new FormData();
     formData.append("file", imageFile);
 
-    const response = await fetch(url, {
+    const endpoint = PUBLIC_BACKEND_URL ? `${PUBLIC_BACKEND_URL}${url.replace("/api", "")}` : url;
+
+    const response = await fetch(endpoint, {
       method: "POST",
       body: formData
     });
