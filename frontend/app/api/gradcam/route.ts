@@ -3,8 +3,28 @@ import type { ApiError, GradcamResult } from "@/lib/types";
 
 const FLASK_API_URL = process.env.FLASK_API_URL ?? "http://127.0.0.1:5000";
 const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024;
+const RETRY_DELAY_MS = 6000;
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(url: string, init: RequestInit) {
+  try {
+    return await fetch(url, init);
+  } catch (firstError) {
+    await sleep(RETRY_DELAY_MS);
+
+    try {
+      return await fetch(url, init);
+    } catch {
+      throw firstError;
+    }
+  }
+}
 
 async function readApiPayload<T>(response: Response): Promise<T | ApiError> {
   const raw = await response.text();
@@ -43,7 +63,7 @@ export async function POST(request: Request) {
     const forwardFormData = new FormData();
     forwardFormData.append("file", file, file.name);
 
-    const response = await fetch(`${FLASK_API_URL}/gradcam`, {
+    const response = await fetchWithRetry(`${FLASK_API_URL}/gradcam`, {
       method: "POST",
       body: forwardFormData
     });
