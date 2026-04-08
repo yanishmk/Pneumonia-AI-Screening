@@ -108,6 +108,20 @@ export default function HomePage() {
     }
   }
 
+  async function readClientPayload<T>(response: Response): Promise<T | ApiError> {
+    const raw = await response.text();
+
+    if (!raw.trim()) {
+      return { error: `Empty response from frontend API (${response.status} ${response.statusText}).` };
+    }
+
+    try {
+      return JSON.parse(raw) as T | ApiError;
+    } catch {
+      return { error: raw };
+    }
+  }
+
   async function postImage<T>(url: string, imageFile: File): Promise<T> {
     const formData = new FormData();
     formData.append("file", imageFile);
@@ -117,7 +131,7 @@ export default function HomePage() {
       body: formData
     });
 
-    const payload = (await response.json()) as T | ApiError;
+    const payload = await readClientPayload<T>(response);
     const apiError = payload as ApiError;
 
     if (!response.ok) {
