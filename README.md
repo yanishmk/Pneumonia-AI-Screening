@@ -102,6 +102,12 @@ Recommended setup:
 - Frontend on Vercel
 - Backend on Render
 
+Alternative lightweight demo setup:
+
+- `hf_space/` contains a Gradio version prepared for Hugging Face Spaces
+- copy `hf_space/app.py`, `hf_space/requirements.txt`, and `backend/pneumonia_cnn_model.keras`
+  into a Space repository to publish the model without the full Next.js + Flask stack
+
 Suggested backend settings on Render:
 
 - Root directory: `backend`
