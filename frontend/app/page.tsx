@@ -3,7 +3,7 @@
 import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { ApiError, GradcamResult, PredictionResult } from "@/lib/types";
 
-const PUBLIC_BACKEND_URL = process.env.NEXT_PUBLIC_FLASK_API_URL?.replace(/\/$/, "");
+const PUBLIC_BACKEND_URL = process.env.NEXT_PUBLIC_FLASK_API_URL?.trim().replace(/\/$/, "");
 
 function formatPercent(value: number) {
   return new Intl.NumberFormat("en", {
