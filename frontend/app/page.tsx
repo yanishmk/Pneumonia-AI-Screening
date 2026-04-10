@@ -28,9 +28,70 @@ function getAlertLevel(probabilityPneumonia: number) {
   return "Low";
 }
 
+function getInterpretation(label: PredictionResult["label"], probabilityPneumonia: number) {
+  if (label === "Normal") {
+    return "No strong pneumonia pattern was flagged by the model on this image.";
+  }
+
+  if (probabilityPneumonia >= 0.8) {
+    return "The image shows strong signs that may be consistent with pneumonia and should be reviewed promptly.";
+  }
+
+  return "The image shows findings that may need clinical review for possible pneumonia.";
+}
+
+function escapePdfText(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+function buildPdfBlob(lines: string[]) {
+  const escapedLines = lines.map((line) => `(${escapePdfText(line)}) Tj`);
+  const content = `BT
+/F1 12 Tf
+40 800 Td
+16 TL
+${escapedLines.join("\nT*\n")}
+ET`;
+
+  const objects = [
+    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj",
+    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj",
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj",
+    `4 0 obj\n<< /Length ${content.length} >>\nstream\n${content}\nendstream\nendobj`,
+    "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj"
+  ];
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+
+  for (const object of objects) {
+    offsets.push(pdf.length);
+    pdf += `${object}\n`;
+  }
+
+  const xrefOffset = pdf.length;
+  pdf += `xref
+0 ${objects.length + 1}
+0000000000 65535 f 
+`;
+
+  for (let index = 1; index < offsets.length; index += 1) {
+    pdf += `${offsets[index].toString().padStart(10, "0")} 00000 n \n`;
+  }
+
+  pdf += `trailer
+<< /Size ${objects.length + 1} /Root 1 0 R >>
+startxref
+${xrefOffset}
+%%EOF`;
+
+  return new Blob([pdf], { type: "application/pdf" });
+}
+
 export default function HomePage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isStudyInfoOpen, setIsStudyInfoOpen] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [prediction, setPrediction] = useState<PredictionResult | null>(null);
@@ -56,6 +117,37 @@ export default function HomePage() {
     return Math.max(prediction.probability_normal, probabilityPneumonia);
   }, [prediction, probabilityPneumonia]);
 
+  const reportLines = useMemo(() => {
+    if (!prediction) {
+      return [];
+    }
+
+    const now = new Date();
+    const formattedDate = now.toLocaleString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+
+    return [
+      "Pneumonia AI Screening Report",
+      `Generated: ${formattedDate}`,
+      "",
+      `Image file: ${file?.name ?? "Uploaded image"}`,
+      `Result: ${getDisplayedLabel(prediction.label)}`,
+      `Pneumonia suspicion: ${formatPercent(probabilityPneumonia)}`,
+      `Confidence: ${formatPercent(modelConfidence)}`,
+      `Attention level: ${getAlertLevel(probabilityPneumonia)}`,
+      `Decision threshold: ${formatPercent(prediction.threshold)}`,
+      "",
+      `Interpretation: ${getInterpretation(prediction.label, probabilityPneumonia)}`,
+      "",
+      "Educational use only. This tool does not replace a radiologist or physician."
+    ];
+  }, [file?.name, modelConfidence, prediction, probabilityPneumonia]);
+
   useEffect(() => {
     if (!file) {
       setPreviewUrl(null);
@@ -73,6 +165,7 @@ export default function HomePage() {
     setGradcam(null);
     setError(null);
     setGradcamError(null);
+    setIsReportOpen(false);
 
     if (!nextFile) {
       setFile(null);
@@ -158,6 +251,7 @@ export default function HomePage() {
     setGradcamError(null);
     setPrediction(null);
     setGradcam(null);
+    setIsReportOpen(false);
 
     try {
       const predictionResult = await postImage<PredictionResult>("/api/predict", file);
@@ -178,211 +272,269 @@ export default function HomePage() {
     }
   }
 
+  function handleDownloadPdf() {
+    if (reportLines.length === 0) {
+      return;
+    }
+
+    const blob = buildPdfBlob(reportLines);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "pneumonia-screening-report.pdf";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  const analysisHeadline = prediction ? getDisplayedLabel(prediction.label) : "Screening idle";
+  const analysisNarrative = prediction
+    ? getInterpretation(prediction.label, probabilityPneumonia)
+    : "Upload a chest X-ray and launch the model.";
+
   return (
-    <main className="page-shell">
-      <section className="hero">
-        <div className="heroHeader">
-          <div className="heroCopy">
-            <p className="eyebrow">AI Radiology Workspace</p>
-            <h1>Pneumonia AI Screening</h1>
-            <p className="subtitle">
-              Upload an image to assess pneumonia suspicion from a chest X-ray. Images that do not resemble a usable
-              chest radiograph will be rejected with a clear message.
-            </p>
+    <main className="pageShell">
+      <section className="heroSection">
+        <div className="heroCopy">
+          <p className="eyebrow">Pneumonia Detection AI</p>
+          <h1>Fast screening for chest X-rays.</h1>
+          <p className="heroLead">Upload, analyze, and review the result in one clean workspace.</p>
+        </div>
+
+        <aside className="heroPanel" aria-label="Session overview">
+          <div className="heroPanelTop">
+            <div>
+              <p className="sectionKicker">Session</p>
+              <h2>{prediction ? "Analysis ready" : "Ready to analyze"}</h2>
+            </div>
+            <span className={`statusBadge ${prediction ? "statusBadgeLive" : ""}`}>
+              {prediction ? "Live" : "Idle"}
+            </span>
           </div>
 
-          <aside className="heroSummary" aria-label="Study summary">
-            <button
-              type="button"
-              className="heroSummaryToggle"
-              aria-expanded={isStudyInfoOpen}
-              onClick={() => setIsStudyInfoOpen((current) => !current)}
-            >
-              <div className="heroSummaryHead">
-                <div className="heroInfoIcon" aria-hidden="true">i</div>
-                <div>
-                  <p className="heroSummaryLabel">Learn more</p>
-                  <h2 className="heroSummaryTitle">About this study</h2>
+          <p className="heroPanelText">
+            {prediction ? "Prediction complete. You can review the result and export the report." : "Ready for a new analysis."}
+          </p>
+
+          <button
+            type="button"
+            className="aboutToggle"
+            aria-expanded={isStudyInfoOpen}
+            onClick={() => setIsStudyInfoOpen((current) => !current)}
+          >
+            <span>About</span>
+            <span>{isStudyInfoOpen ? "Hide" : "Show"}</span>
+          </button>
+
+          {isStudyInfoOpen ? (
+            <p className="aboutText">
+              Educational tool for AI-assisted chest X-ray screening. It supports review and does not replace medical
+              diagnosis.
+            </p>
+          ) : null}
+        </aside>
+      </section>
+
+      <section className="workspaceSection" aria-label="Screening workspace">
+        <form onSubmit={handleSubmit} className="workspaceGrid">
+          <section className="uploadPanel">
+            <div className="panelHeader">
+              <div>
+                <p className="sectionKicker">Input</p>
+                <h2>Upload chest X-ray</h2>
+              </div>
+              <p className="panelMeta">PNG, JPG, JPEG</p>
+            </div>
+
+            <div className="uploadStage">
+              <div
+                className={`dropzone ${isDragging ? "dropzoneActive" : ""}`}
+                role="button"
+                tabIndex={0}
+                onClick={openFilePicker}
+                onKeyDown={handleDropzoneKeyDown}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+              >
+                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} />
+                <span className="dropzoneIcon">+</span>
+                <strong>{file ? file.name : "Drop image or click to browse"}</strong>
+                <small>Best with frontal chest X-ray images.</small>
+
+                <button
+                  className="primaryButton"
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openFilePicker();
+                  }}
+                >
+                  Browse file
+                </button>
+              </div>
+
+              <div className="previewStage" aria-label="Uploaded image preview">
+                <div className="previewTopbar">
+                  <span>Preview</span>
+                  <span>{file ? "Loaded" : "Awaiting image"}</span>
+                </div>
+
+                <div className="previewFrame">
+                  {previewUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={previewUrl} alt="Uploaded chest X-ray preview" className="previewImage" />
+                  ) : (
+                    <div className="previewPlaceholder">No image selected</div>
+                  )}
                 </div>
               </div>
-              <span className="heroSummaryChevron" aria-hidden="true">{isStudyInfoOpen ? "-" : "+"}</span>
-            </button>
+            </div>
 
-            {isStudyInfoOpen ? (
-              <p className="heroSummaryText">
-                Educational project focused on pneumonia detection from chest radiographs using a CNN model trained in
-                the reference notebook.
-              </p>
-            ) : null}
-          </aside>
-        </div>
-      </section>
+            <div className="actionBar">
+              <button className="analyzeButton" type="submit" disabled={!file || isLoading}>
+                {isLoading ? "Analyzing..." : "Run analysis"}
+              </button>
+              <p className="actionHint">{file ? "Image ready for screening." : "Select one image to start."}</p>
+            </div>
+          </section>
 
-      <section className="infoSection" aria-label="How it works">
-        <div className="infoCard">
-          <span className="infoStep">1</span>
-          <h3>Upload</h3>
-          <p>Add a chest X-ray image from your device.</p>
-        </div>
-        <div className="infoCard">
-          <span className="infoStep">2</span>
-          <h3>Analyze</h3>
-          <p>The model evaluates the image and checks whether it is a compatible chest radiograph.</p>
-        </div>
-        <div className="infoCard">
-          <span className="infoStep">3</span>
-          <h3>Review</h3>
-          <p>Read the prediction, confidence level, and Grad-CAM heatmap.</p>
-        </div>
-      </section>
+          <aside className="resultPanel" aria-label="Prediction output">
+            <div className="panelHeader panelHeaderCompact">
+              <div>
+                <p className="sectionKicker">Output</p>
+                <h2>{analysisHeadline}</h2>
+              </div>
+              {prediction ? (
+                <span className={`resultTone ${prediction.label === "Normal" ? "resultToneNormal" : "resultToneAlert"}`}>
+                  {getAlertLevel(probabilityPneumonia)}
+                </span>
+              ) : null}
+            </div>
 
-      <section className="card" aria-label="Prediction form">
-        <form onSubmit={handleSubmit} className="upload-grid">
-          <div
-            className={`dropzone ${isDragging ? "dropzoneActive" : ""}`}
-            role="button"
-            tabIndex={0}
-            onClick={openFilePicker}
-            onKeyDown={handleDropzoneKeyDown}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setIsDragging(true);
-            }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={handleDrop}
-          >
-            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} />
-            <span className="dropzoneIcon">+</span>
-            <strong>{file ? file.name : "Choose or drop a chest X-ray"}</strong>
-            <small>Any image file is accepted. Non X-ray images will be rejected after analysis.</small>
-            <button
-              className="browseButton"
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                openFilePicker();
-              }}
-            >
-              Browse Files
-            </button>
-          </div>
+            <p className="resultNarrative">{analysisNarrative}</p>
 
-          <div className="previewPanel">
-            {previewUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={previewUrl} alt="Uploaded chest X-ray preview" className="previewImage" />
+            {prediction ? (
+              <>
+                <div className="scoreHero">
+                  <div>
+                    <span className="scoreLabel">Pneumonia suspicion</span>
+                    <strong>{formatPercent(probabilityPneumonia)}</strong>
+                  </div>
+                </div>
+
+                <div className="metricList">
+                  <div className="metricRow">
+                    <span>Confidence</span>
+                    <strong>{formatPercent(modelConfidence)}</strong>
+                  </div>
+                  <div className="metricRow">
+                    <span>Threshold</span>
+                    <strong>{formatPercent(prediction.threshold)}</strong>
+                  </div>
+                  <div className="metricRow">
+                    <span>Class</span>
+                    <strong>{prediction.label}</strong>
+                  </div>
+                </div>
+
+                <div
+                  className="confidenceBar"
+                  aria-label={`Pneumonia probability ${Math.round(probabilityPneumonia * 100)}%`}
+                >
+                  <span style={{ width: `${Math.round(probabilityPneumonia * 100)}%` }} />
+                </div>
+
+                <div className="reportTools">
+                  <button
+                    type="button"
+                    className="secondaryButton"
+                    onClick={() => setIsReportOpen((current) => !current)}
+                  >
+                    {isReportOpen ? "Hide report" : "Preview report"}
+                  </button>
+                  <button type="button" className="secondaryButton secondaryButtonStrong" onClick={handleDownloadPdf}>
+                    Download PDF
+                  </button>
+                </div>
+
+                {isReportOpen && reportLines.length > 0 ? (
+                  <div className="reportPreview">
+                    {reportLines.map((line, index) => (
+                      <p key={`${line}-${index}`}>{line || "\u00A0"}</p>
+                    ))}
+                  </div>
+                ) : null}
+              </>
             ) : (
-              <div className="previewPlaceholder">Image preview will appear here</div>
+              <div className="emptyPanel">
+                <span className="emptyPulse" aria-hidden="true" />
+                <p>Prediction results will appear here after analysis.</p>
+              </div>
             )}
-          </div>
-
-          <button className="submitButton" type="submit" disabled={!file || isLoading}>
-            {isLoading ? "Analyzing..." : "Run Analysis"}
-          </button>
+          </aside>
         </form>
 
         {error ? (
-          <div className="alert" role="alert">
+          <div className="alertBanner" role="alert">
             {error}
           </div>
         ) : null}
 
-        {prediction ? (
-          <section className="resultPanel" aria-label="Prediction result">
+        <section className="visualSection" aria-label="Visual explanation">
+          <div className="panelHeader">
             <div>
-              <p className="resultLabel">Prediction</p>
-              <h2 className={prediction.label === "Normal" ? "normalText" : "pneumoniaText"}>
-                {getDisplayedLabel(prediction.label)}
-              </h2>
+              <p className="sectionKicker">Grad-CAM</p>
+              <h2>Model focus map</h2>
             </div>
+            <p className="panelMeta">Original image and AI attention overlay</p>
+          </div>
 
-            <div className="metrics">
-              <div>
-                <span>Pneumonia suspicion</span>
-                <strong>{formatPercent(probabilityPneumonia)}</strong>
-              </div>
-              <div>
-                <span>Model confidence</span>
-                <strong>{formatPercent(modelConfidence)}</strong>
-              </div>
-              <div>
-                <span>Alert level</span>
-                <strong>{getAlertLevel(probabilityPneumonia)}</strong>
-              </div>
-            </div>
-
-            <div className="confidenceBar" aria-label={`Pneumonia probability ${Math.round(probabilityPneumonia * 100)}%`}>
-              <span style={{ width: `${Math.round(probabilityPneumonia * 100)}%` }} />
-            </div>
-            <p className="thresholdNote">Model decision threshold: {prediction.threshold}</p>
-          </section>
-        ) : null}
-
-        {prediction ? (
-          <section className="gradcamPanel" aria-label="Grad-CAM result">
-            <div className="gradcamHeader">
-              <div>
-                <p className="resultLabel">Grad-CAM</p>
-                <h3 className="gradcamTitle">Model attention map</h3>
-              </div>
-              <p className="gradcamDescription">
-                Highlights the image regions that most influenced the model during prediction.
-              </p>
-            </div>
-
-            {gradcam ? (
-              <div className="gradcamContent">
-                <div className="gradcamCompareGrid">
-                  <div className="gradcamImageCard">
-                    <div className="gradcamImageHeader">Original image</div>
+          {prediction ? (
+            gradcam ? (
+              <>
+                <div className="visualGrid">
+                  <figure className="visualCard">
+                    <figcaption>Original</figcaption>
                     {previewUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={previewUrl} alt="Original uploaded chest X-ray" className="gradcamImage" />
+                      <img src={previewUrl} alt="Original uploaded chest X-ray" className="visualImage" />
                     ) : (
-                      <div className="gradcamEmpty">Original image preview is unavailable.</div>
+                      <div className="visualEmpty">Unavailable</div>
                     )}
-                  </div>
+                  </figure>
 
-                  <div className="gradcamImageCard">
-                    <div className="gradcamImageHeader">Grad-CAM overlay</div>
+                  <figure className="visualCard">
+                    <figcaption>Grad-CAM</figcaption>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={`data:image/png;base64,${gradcam.gradcam_image_base64}`}
                       alt="Grad-CAM heatmap overlay"
-                      className="gradcamImage"
+                      className="visualImage"
                     />
-                  </div>
+                  </figure>
                 </div>
 
-                <div className="gradcamNotes">
-                  <div className="gradcamNoteCard">
-                    <span>Visual explanation</span>
-                    <strong>Highlighted regions influenced the model most.</strong>
-                  </div>
-                  <div className="gradcamNoteCard">
-                    <span>Predicted label</span>
-                    <strong>{getDisplayedLabel(prediction.label)}</strong>
-                  </div>
-                  <div className="gradcamNoteCard">
-                    <span>Interpretation note</span>
-                    <strong>Use as a visual aid, not as a diagnosis.</strong>
-                  </div>
+                <div className="visualNotes">
+                  <p>Warmer regions indicate stronger influence on the prediction.</p>
                 </div>
-              </div>
-            ) : gradcamError ? (
-              <div className="gradcamEmpty">{gradcamError}</div>
+              </>
             ) : (
-              <div className="gradcamEmpty">Grad-CAM will appear here after a successful analysis.</div>
-            )}
-          </section>
-        ) : null}
+              <div className="visualEmpty">
+                {gradcamError ? gradcamError : "Generating visual explanation..."}
+              </div>
+            )
+          ) : (
+            <div className="visualEmpty">Run an analysis to unlock the visual explanation.</div>
+          )}
+        </section>
       </section>
 
-      <p className="disclaimer">
-        Tool developed for educational purposes only, intended for visual exploration and triage support. This result
-        is not a medical diagnosis, does not replace the opinion of a radiologist or physician, and must always be
-        interpreted with the patient&apos;s clinical context.
-      </p>
+      <p className="footerNote">Educational use only. This tool does not replace a doctor.</p>
     </main>
   );
 }
