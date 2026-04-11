@@ -11,11 +11,43 @@ type PatientInfo = {
   age: string;
 };
 
+type ReportRow = {
+  label: string;
+  value: string;
+};
+
+type ReportSection = {
+  title: string;
+  rows: ReportRow[];
+};
+
+type ReportData = {
+  title: string;
+  generatedAt: string;
+  patientLabel: string;
+  imageLabel: string;
+  summary: string;
+  alertLevel: string;
+  sections: ReportSection[];
+  interpretation: string;
+  disclaimer: string;
+};
+
 function formatPercent(value: number) {
   return new Intl.NumberFormat("en", {
     style: "percent",
     maximumFractionDigits: 2
   }).format(value);
+}
+
+function formatReportDate(date: Date) {
+  return date.toLocaleString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 }
 
 function getDisplayedLabel(label: PredictionResult["label"]) {
@@ -55,25 +87,200 @@ function getPdfSafeValue(value: string) {
   return getFilledValue(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
+function getPatientLabel(patientInfo: PatientInfo) {
+  const name = [patientInfo.firstName.trim(), patientInfo.lastName.trim()].filter(Boolean).join(" ");
+  const age = patientInfo.age.trim();
+  const parts = [name, age ? `${age} years` : ""].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(" | ") : "Patient details pending";
+}
+
 function escapePdfText(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
 
-function buildPdfBlob(lines: string[]) {
-  const escapedLines = lines.map((line) => `(${escapePdfText(line)}) Tj`);
-  const content = `BT
-/F1 12 Tf
-40 800 Td
-16 TL
-${escapedLines.join("\nT*\n")}
-ET`;
+function wrapPdfText(value: string, maxChars: number) {
+  const sanitized = value.trim();
+
+  if (!sanitized) {
+    return [""];
+  }
+
+  const words = sanitized.split(/\s+/);
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    const candidate = currentLine ? `${currentLine} ${word}` : word;
+
+    if (candidate.length <= maxChars) {
+      currentLine = candidate;
+      continue;
+    }
+
+    if (currentLine) {
+      lines.push(currentLine);
+      currentLine = "";
+    }
+
+    if (word.length <= maxChars) {
+      currentLine = word;
+      continue;
+    }
+
+    for (let index = 0; index < word.length; index += maxChars) {
+      lines.push(word.slice(index, index + maxChars));
+    }
+  }
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  return lines;
+}
+
+function buildPdfBlob(report: ReportData) {
+  const commands: string[] = [];
+  const marginX = 46;
+  const contentWidth = 503;
+
+  const pushText = (text: string, options: { x?: number; y?: number; size?: number; font?: string; color?: [number, number, number] } = {}) => {
+    const { x = marginX, y = 780, size = 12, font = "F1", color = [0.07, 0.11, 0.13] } = options;
+    const [red, green, blue] = color;
+    commands.push(`BT /${font} ${size} Tf ${red} ${green} ${blue} rg 1 0 0 1 ${x} ${y} Tm (${escapePdfText(text)}) Tj ET`);
+  };
+
+  const pushRule = (fromX: number, toX: number, y: number, color = [0.82, 0.88, 0.89], width = 1) => {
+    const [red, green, blue] = color;
+    commands.push(`${width} w ${red} ${green} ${blue} RG ${fromX} ${y} m ${toX} ${y} l S`);
+  };
+
+  const pushFilledRect = (x: number, y: number, width: number, height: number, color: [number, number, number]) => {
+    const [red, green, blue] = color;
+    commands.push(`${red} ${green} ${blue} rg ${x} ${y} ${width} ${height} re f`);
+  };
+
+  const pushStrokedRect = (
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    color: [number, number, number] = [0.84, 0.89, 0.9],
+    lineWidth = 1
+  ) => {
+    const [red, green, blue] = color;
+    commands.push(`${lineWidth} w ${red} ${green} ${blue} RG ${x} ${y} ${width} ${height} re S`);
+  };
+
+  const pushWrappedText = (
+    text: string,
+    options: { x?: number; y: number; maxChars: number; size?: number; font?: string; color?: [number, number, number]; lineGap?: number }
+  ) => {
+    const { x = marginX, y, maxChars, size = 12, font = "F1", color = [0.07, 0.11, 0.13], lineGap = 14 } = options;
+    const lines = wrapPdfText(text, maxChars);
+
+    lines.forEach((line, index) => {
+      pushText(line, { x, y: y - index * lineGap, size, font, color });
+    });
+
+    return lines.length;
+  };
+
+  const pushCardTitle = (title: string, y: number) => {
+    pushText(title.toUpperCase(), { x: marginX + 18, y, size: 9.5, font: "F2", color: [0.06, 0.46, 0.43] });
+  };
+
+  pushFilledRect(marginX, 724, contentWidth, 84, [0.08, 0.25, 0.3]);
+  pushText(report.title, { x: marginX + 18, y: 780, size: 22, font: "F2", color: [1, 1, 1] });
+  pushText(`Generated ${report.generatedAt}`, { x: marginX + 18, y: 758, size: 10.5, color: [0.86, 0.92, 0.93] });
+  pushWrappedText(report.patientLabel, {
+    x: marginX + 18,
+    y: 740,
+    maxChars: 62,
+    size: 11,
+    font: "F2",
+    color: [0.9, 0.96, 0.96],
+    lineGap: 12
+  });
+
+  pushFilledRect(marginX, 642, contentWidth, 58, [0.93, 0.97, 0.97]);
+  pushStrokedRect(marginX, 642, contentWidth, 58, [0.82, 0.89, 0.9]);
+  pushText("AI SUMMARY", { x: marginX + 18, y: 682, size: 9.5, font: "F2", color: [0.06, 0.46, 0.43] });
+  pushText(report.summary, { x: marginX + 18, y: 660, size: 18, font: "F2", color: [0.05, 0.08, 0.1] });
+  pushFilledRect(438, 656, 92, 26, report.alertLevel === "High" ? [0.99, 0.92, 0.88] : report.alertLevel === "Moderate" ? [0.99, 0.96, 0.88] : [0.9, 0.97, 0.93]);
+  pushText(`${report.alertLevel} alert`, {
+    x: 458,
+    y: 665,
+    size: 10,
+    font: "F2",
+    color: report.alertLevel === "High" ? [0.74, 0.28, 0.08] : report.alertLevel === "Moderate" ? [0.64, 0.47, 0.06] : [0.08, 0.45, 0.31]
+  });
+
+  pushFilledRect(marginX, 534, contentWidth, 88, [1, 1, 1]);
+  pushStrokedRect(marginX, 534, contentWidth, 88, [0.84, 0.89, 0.9]);
+  pushCardTitle("Patient information", 600);
+  pushText("First name", { x: marginX + 18, y: 574, size: 10, font: "F2", color: [0.4, 0.47, 0.5] });
+  pushText(report.sections[0]?.rows[0]?.value ?? "Not provided", { x: marginX + 120, y: 574, size: 11.5, font: "F2" });
+  pushText("Last name", { x: marginX + 18, y: 554, size: 10, font: "F2", color: [0.4, 0.47, 0.5] });
+  pushText(report.sections[0]?.rows[1]?.value ?? "Not provided", { x: marginX + 120, y: 554, size: 11.5, font: "F2" });
+  pushText("Age", { x: 330, y: 574, size: 10, font: "F2", color: [0.4, 0.47, 0.5] });
+  pushText(report.sections[0]?.rows[2]?.value ?? "Not provided", { x: 368, y: 574, size: 11.5, font: "F2" });
+
+  pushFilledRect(marginX, 372, contentWidth, 140, [1, 1, 1]);
+  pushStrokedRect(marginX, 372, contentWidth, 140, [0.84, 0.89, 0.9]);
+  pushCardTitle("Exam summary", 490);
+  pushText("Image file", { x: marginX + 18, y: 464, size: 10, font: "F2", color: [0.4, 0.47, 0.5] });
+  const imageLineCount = pushWrappedText(report.imageLabel, {
+    x: marginX + 110,
+    y: 464,
+    maxChars: 50,
+    size: 11,
+    font: "F2",
+    color: [0.07, 0.11, 0.13],
+    lineGap: 13
+  });
+  const metricsStartY = 464 - Math.max(1, imageLineCount) * 13 - 12;
+  pushText("Result", { x: marginX + 18, y: metricsStartY, size: 10, font: "F2", color: [0.4, 0.47, 0.5] });
+  pushText(report.sections[1]?.rows[1]?.value ?? report.summary, { x: marginX + 110, y: metricsStartY, size: 11.5, font: "F2" });
+  pushText("Suspicion", { x: marginX + 18, y: metricsStartY - 20, size: 10, font: "F2", color: [0.4, 0.47, 0.5] });
+  pushText(report.sections[1]?.rows[2]?.value ?? "N/A", { x: marginX + 110, y: metricsStartY - 20, size: 11.5, font: "F2" });
+  pushText("Confidence", { x: 330, y: metricsStartY - 20, size: 10, font: "F2", color: [0.4, 0.47, 0.5] });
+  pushText(report.sections[1]?.rows[3]?.value ?? "N/A", { x: 392, y: metricsStartY - 20, size: 11.5, font: "F2" });
+  pushText("Attention level", { x: marginX + 18, y: metricsStartY - 40, size: 10, font: "F2", color: [0.4, 0.47, 0.5] });
+  pushText(report.sections[1]?.rows[4]?.value ?? report.alertLevel, { x: marginX + 110, y: metricsStartY - 40, size: 11.5, font: "F2" });
+
+  pushFilledRect(marginX, 236, contentWidth, 112, [0.98, 0.99, 0.99]);
+  pushStrokedRect(marginX, 236, contentWidth, 112, [0.84, 0.89, 0.9]);
+  pushCardTitle("Interpretation", 326);
+  pushWrappedText(report.interpretation, {
+    x: marginX + 18,
+    y: 298,
+    maxChars: 78,
+    size: 11.5,
+    color: [0.07, 0.11, 0.13],
+    lineGap: 15
+  });
+
+  pushRule(marginX, marginX + contentWidth, 92, [0.84, 0.89, 0.9]);
+  pushWrappedText(report.disclaimer, {
+    x: marginX,
+    y: 74,
+    maxChars: 86,
+    size: 9.5,
+    color: [0.4, 0.47, 0.5],
+    lineGap: 12
+  });
+
+  const content = commands.join("\n");
 
   const objects = [
     "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj",
     "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj",
-    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj",
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>\nendobj",
     `4 0 obj\n<< /Length ${content.length} >>\nstream\n${content}\nendstream\nendobj`,
-    "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj"
+    "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj",
+    "6 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj"
   ];
 
   let pdf = "%PDF-1.4\n";
@@ -137,41 +344,49 @@ export default function HomePage() {
     return Math.max(prediction.probability_normal, probabilityPneumonia);
   }, [prediction, probabilityPneumonia]);
 
-  const reportLines = useMemo(() => {
+  const reportData = useMemo<ReportData | null>(() => {
     if (!prediction) {
-      return [];
+      return null;
     }
 
-    const now = new Date();
-    const formattedDate = now.toLocaleString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
-    });
+    const generatedAt = formatReportDate(new Date());
+    const patientLabel = getPdfSafeValue(getPatientLabel(patientInfo));
+    const imageLabel = getPdfSafeValue(file?.name ?? "Uploaded image");
+    const reportSummary = getDisplayedLabel(prediction.label);
+    const alertLevel = getAlertLevel(probabilityPneumonia);
+    const interpretation = getInterpretation(prediction.label, probabilityPneumonia);
 
-    return [
-      "Pneumonia AI Screening Report",
-      `Generated: ${formattedDate}`,
-      "",
-      "Patient Information",
-      `First name: ${getPdfSafeValue(patientInfo.firstName)}`,
-      `Last name: ${getPdfSafeValue(patientInfo.lastName)}`,
-      `Age: ${getPdfSafeValue(patientInfo.age)}`,
-      "",
-      "Exam Summary",
-      `Image file: ${getPdfSafeValue(file?.name ?? "Uploaded image")}`,
-      `Result: ${getDisplayedLabel(prediction.label)}`,
-      `Pneumonia suspicion: ${formatPercent(probabilityPneumonia)}`,
-      `Confidence: ${formatPercent(modelConfidence)}`,
-      `Attention level: ${getAlertLevel(probabilityPneumonia)}`,
-      "",
-      `Interpretation: ${getInterpretation(prediction.label, probabilityPneumonia)}`,
-      "",
-      "Educational use only. This tool does not replace a radiologist or physician."
-    ];
-  }, [file?.name, modelConfidence, patientInfo.age, patientInfo.firstName, patientInfo.lastName, prediction, probabilityPneumonia]);
+    return {
+      title: "Pneumonia AI Screening Report",
+      generatedAt,
+      patientLabel,
+      imageLabel,
+      summary: reportSummary,
+      alertLevel,
+      sections: [
+        {
+          title: "Patient information",
+          rows: [
+            { label: "First name", value: getPdfSafeValue(patientInfo.firstName) },
+            { label: "Last name", value: getPdfSafeValue(patientInfo.lastName) },
+            { label: "Age", value: getPdfSafeValue(patientInfo.age) }
+          ]
+        },
+        {
+          title: "Exam summary",
+          rows: [
+            { label: "Image file", value: imageLabel },
+            { label: "Result", value: reportSummary },
+            { label: "Pneumonia suspicion", value: formatPercent(probabilityPneumonia) },
+            { label: "Confidence", value: formatPercent(modelConfidence) },
+            { label: "Attention level", value: alertLevel }
+          ]
+        }
+      ],
+      interpretation,
+      disclaimer: "Educational use only. This tool does not replace a radiologist or physician."
+    };
+  }, [file?.name, modelConfidence, patientInfo, prediction, probabilityPneumonia]);
 
   useEffect(() => {
     if (!file) {
@@ -305,11 +520,11 @@ export default function HomePage() {
   }
 
   function handleDownloadPdf() {
-    if (reportLines.length === 0) {
+    if (!reportData) {
       return;
     }
 
-    const blob = buildPdfBlob(reportLines);
+    const blob = buildPdfBlob(reportData);
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -523,53 +738,70 @@ export default function HomePage() {
                   </button>
                 </div>
 
-                {isReportOpen && reportLines.length > 0 ? (
+                {isReportOpen && reportData ? (
                   <div className="reportPreview">
                     <div className="reportPreviewHeader">
                       <div>
                         <p className="reportPreviewKicker">Clinical report</p>
-                        <h3>Pneumonia AI screening report</h3>
+                        <h3>{reportData.title}</h3>
+                        <p className="reportHeaderLead">{getPatientLabel(patientInfo)}</p>
                       </div>
-                      <span>{new Date().toLocaleDateString("en-US")}</span>
-                    </div>
-
-                    <div className="reportSection">
-                      <p className="reportSectionTitle">Patient information</p>
-                      <div className="reportRow">
-                        <span>First name</span>
-                        <strong>{getFilledValue(patientInfo.firstName)}</strong>
-                      </div>
-                      <div className="reportRow">
-                        <span>Last name</span>
-                        <strong>{getFilledValue(patientInfo.lastName)}</strong>
-                      </div>
-                      <div className="reportRow">
-                        <span>Age</span>
-                        <strong>{getFilledValue(patientInfo.age)}</strong>
+                      <div className="reportPreviewMeta">
+                        <span>{reportData.generatedAt}</span>
+                        <span className={`reportBadge ${prediction.label === "Normal" ? "reportBadgeNormal" : "reportBadgeAlert"}`}>
+                          {reportData.alertLevel} attention
+                        </span>
                       </div>
                     </div>
 
-                    <div className="reportSection">
-                      <p className="reportSectionTitle">Exam summary</p>
-                      <div className="reportRow">
-                        <span>Image</span>
-                        <strong>{file?.name ?? "Uploaded image"}</strong>
+                    <div className="reportSummaryCard">
+                      <p className="reportSummaryLabel">AI summary</p>
+                      <div className="reportSummaryRow">
+                        <strong>{reportData.summary}</strong>
+                        <span>{formatPercent(probabilityPneumonia)} suspicion</span>
                       </div>
-                      <div className="reportRow">
-                        <span>Result</span>
-                        <strong>{getDisplayedLabel(prediction.label)}</strong>
+                      <p className="reportSummaryMeta">{file?.name ?? "Uploaded image"}</p>
+                    </div>
+
+                    <div className="reportGrid">
+                      <div className="reportSection">
+                        <p className="reportSectionTitle">Patient information</p>
+                        <div className="reportRow">
+                          <span>First name</span>
+                          <strong>{getFilledValue(patientInfo.firstName)}</strong>
+                        </div>
+                        <div className="reportRow">
+                          <span>Last name</span>
+                          <strong>{getFilledValue(patientInfo.lastName)}</strong>
+                        </div>
+                        <div className="reportRow">
+                          <span>Age</span>
+                          <strong>{getFilledValue(patientInfo.age)}</strong>
+                        </div>
                       </div>
-                      <div className="reportRow">
-                        <span>Pneumonia suspicion</span>
-                        <strong>{formatPercent(probabilityPneumonia)}</strong>
-                      </div>
-                      <div className="reportRow">
-                        <span>Confidence</span>
-                        <strong>{formatPercent(modelConfidence)}</strong>
-                      </div>
-                      <div className="reportRow">
-                        <span>Alert level</span>
-                        <strong>{getAlertLevel(probabilityPneumonia)}</strong>
+
+                      <div className="reportSection">
+                        <p className="reportSectionTitle">Exam summary</p>
+                        <div className="reportRow reportRowStacked">
+                          <span>Image</span>
+                          <strong className="reportValueWrap">{file?.name ?? "Uploaded image"}</strong>
+                        </div>
+                        <div className="reportRow">
+                          <span>Result</span>
+                          <strong>{getDisplayedLabel(prediction.label)}</strong>
+                        </div>
+                        <div className="reportRow">
+                          <span>Pneumonia suspicion</span>
+                          <strong>{formatPercent(probabilityPneumonia)}</strong>
+                        </div>
+                        <div className="reportRow">
+                          <span>Confidence</span>
+                          <strong>{formatPercent(modelConfidence)}</strong>
+                        </div>
+                        <div className="reportRow">
+                          <span>Alert level</span>
+                          <strong>{getAlertLevel(probabilityPneumonia)}</strong>
+                        </div>
                       </div>
                     </div>
 
