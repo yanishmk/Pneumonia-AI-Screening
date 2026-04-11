@@ -227,6 +227,53 @@ h3,
   border-right: 1px solid var(--line);
 }
 
+.patientGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.field input {
+  width: 100%;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid rgba(18, 63, 86, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--text);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+}
+
+.field input::placeholder {
+  color: #8aa1a9;
+}
+
+.field input:focus {
+  outline: none;
+  border-color: rgba(15, 118, 110, 0.34);
+  box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.08);
+  background: white;
+}
+
+.fieldCompact {
+  max-width: 160px;
+}
+
 .panelHeader {
   margin-bottom: 18px;
 }
@@ -519,11 +566,85 @@ h3,
 }
 
 .reportPreview {
-  max-height: 240px;
+  max-height: 420px;
   overflow: auto;
   padding: 18px;
   background: rgba(246, 250, 250, 0.92);
   border: 1px solid rgba(18, 63, 86, 0.08);
+}
+
+.reportPreviewHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.reportPreviewHeader h3 {
+  margin: 6px 0 0;
+  font-size: 1.3rem;
+  letter-spacing: -0.04em;
+}
+
+.reportPreviewHeader span,
+.reportPreviewKicker,
+.reportSectionTitle,
+.reportRow span,
+.reportNarrativeText,
+.reportFootnote {
+  color: var(--muted);
+}
+
+.reportPreviewKicker {
+  margin: 0;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.reportSection {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.reportSectionTitle {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.reportRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 0;
+}
+
+.reportRow strong {
+  text-align: right;
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.98rem;
+  letter-spacing: -0.02em;
+}
+
+.reportNarrativeText {
+  margin: 0;
+  line-height: 1.75;
+ }
+
+.reportFootnote {
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  line-height: 1.7;
+  font-size: 0.92rem;
 }
 
 .reportPreview p {
@@ -631,6 +752,10 @@ h3,
     grid-template-columns: 1fr;
   }
 
+  .patientGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .uploadPanel {
     padding-right: 0;
     padding-bottom: 28px;
@@ -661,6 +786,14 @@ h3,
   .previewTopbar,
   .visualNotes {
     display: grid;
+  }
+
+  .patientGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .fieldCompact {
+    max-width: none;
   }
 
   .actionBar {
@@ -701,5 +834,14 @@ h3,
 
   .heroCopy h1 {
     font-size: clamp(2.5rem, 14vw, 4.2rem);
+  }
+
+  .reportPreviewHeader,
+  .reportRow {
+    display: grid;
+  }
+
+  .reportRow strong {
+    text-align: left;
   }
 }

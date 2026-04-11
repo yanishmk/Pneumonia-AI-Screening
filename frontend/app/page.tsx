@@ -5,6 +5,12 @@ import type { ApiError, GradcamResult, PredictionResult } from "@/lib/types";
 
 const PUBLIC_BACKEND_URL = process.env.NEXT_PUBLIC_FLASK_API_URL?.trim().replace(/\/$/, "");
 
+type PatientInfo = {
+  firstName: string;
+  lastName: string;
+  age: string;
+};
+
 function formatPercent(value: number) {
   return new Intl.NumberFormat("en", {
     style: "percent",
@@ -38,6 +44,15 @@ function getInterpretation(label: PredictionResult["label"], probabilityPneumoni
   }
 
   return "The image shows findings that may need clinical review for possible pneumonia.";
+}
+
+function getFilledValue(value: string) {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : "Not provided";
+}
+
+function getPdfSafeValue(value: string) {
+  return getFilledValue(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
 function escapePdfText(value: string) {
@@ -100,6 +115,11 @@ export default function HomePage() {
   const [gradcamError, setGradcamError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [patientInfo, setPatientInfo] = useState<PatientInfo>({
+    firstName: "",
+    lastName: "",
+    age: ""
+  });
 
   const probabilityPneumonia = useMemo(() => {
     if (!prediction) {
@@ -135,18 +155,23 @@ export default function HomePage() {
       "Pneumonia AI Screening Report",
       `Generated: ${formattedDate}`,
       "",
-      `Image file: ${file?.name ?? "Uploaded image"}`,
+      "Patient Information",
+      `First name: ${getPdfSafeValue(patientInfo.firstName)}`,
+      `Last name: ${getPdfSafeValue(patientInfo.lastName)}`,
+      `Age: ${getPdfSafeValue(patientInfo.age)}`,
+      "",
+      "Exam Summary",
+      `Image file: ${getPdfSafeValue(file?.name ?? "Uploaded image")}`,
       `Result: ${getDisplayedLabel(prediction.label)}`,
       `Pneumonia suspicion: ${formatPercent(probabilityPneumonia)}`,
       `Confidence: ${formatPercent(modelConfidence)}`,
       `Attention level: ${getAlertLevel(probabilityPneumonia)}`,
-      `Decision threshold: ${formatPercent(prediction.threshold)}`,
       "",
       `Interpretation: ${getInterpretation(prediction.label, probabilityPneumonia)}`,
       "",
       "Educational use only. This tool does not replace a radiologist or physician."
     ];
-  }, [file?.name, modelConfidence, prediction, probabilityPneumonia]);
+  }, [file?.name, modelConfidence, patientInfo.age, patientInfo.firstName, patientInfo.lastName, prediction, probabilityPneumonia]);
 
   useEffect(() => {
     if (!file) {
@@ -184,6 +209,13 @@ export default function HomePage() {
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     selectFile(event.target.files?.[0] ?? null);
     event.target.value = "";
+  }
+
+  function handlePatientInfoChange(field: keyof PatientInfo, value: string) {
+    setPatientInfo((current) => ({
+      ...current,
+      [field]: value
+    }));
   }
 
   function handleDrop(event: DragEvent<HTMLDivElement>) {
@@ -347,6 +379,39 @@ export default function HomePage() {
               <p className="panelMeta">PNG, JPG, JPEG</p>
             </div>
 
+            <div className="patientGrid" aria-label="Patient information">
+              <label className="field">
+                <span>First name</span>
+                <input
+                  type="text"
+                  value={patientInfo.firstName}
+                  onChange={(event) => handlePatientInfoChange("firstName", event.target.value)}
+                  placeholder="Enter first name"
+                />
+              </label>
+
+              <label className="field">
+                <span>Last name</span>
+                <input
+                  type="text"
+                  value={patientInfo.lastName}
+                  onChange={(event) => handlePatientInfoChange("lastName", event.target.value)}
+                  placeholder="Enter last name"
+                />
+              </label>
+
+              <label className="field fieldCompact">
+                <span>Age</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={patientInfo.age}
+                  onChange={(event) => handlePatientInfoChange("age", event.target.value)}
+                  placeholder="Age"
+                />
+              </label>
+            </div>
+
             <div className="uploadStage">
               <div
                 className={`dropzone ${isDragging ? "dropzoneActive" : ""}`}
@@ -433,10 +498,6 @@ export default function HomePage() {
                     <strong>{formatPercent(modelConfidence)}</strong>
                   </div>
                   <div className="metricRow">
-                    <span>Threshold</span>
-                    <strong>{formatPercent(prediction.threshold)}</strong>
-                  </div>
-                  <div className="metricRow">
                     <span>Class</span>
                     <strong>{prediction.label}</strong>
                   </div>
@@ -464,9 +525,62 @@ export default function HomePage() {
 
                 {isReportOpen && reportLines.length > 0 ? (
                   <div className="reportPreview">
-                    {reportLines.map((line, index) => (
-                      <p key={`${line}-${index}`}>{line || "\u00A0"}</p>
-                    ))}
+                    <div className="reportPreviewHeader">
+                      <div>
+                        <p className="reportPreviewKicker">Clinical report</p>
+                        <h3>Pneumonia AI screening report</h3>
+                      </div>
+                      <span>{new Date().toLocaleDateString("en-US")}</span>
+                    </div>
+
+                    <div className="reportSection">
+                      <p className="reportSectionTitle">Patient information</p>
+                      <div className="reportRow">
+                        <span>First name</span>
+                        <strong>{getFilledValue(patientInfo.firstName)}</strong>
+                      </div>
+                      <div className="reportRow">
+                        <span>Last name</span>
+                        <strong>{getFilledValue(patientInfo.lastName)}</strong>
+                      </div>
+                      <div className="reportRow">
+                        <span>Age</span>
+                        <strong>{getFilledValue(patientInfo.age)}</strong>
+                      </div>
+                    </div>
+
+                    <div className="reportSection">
+                      <p className="reportSectionTitle">Exam summary</p>
+                      <div className="reportRow">
+                        <span>Image</span>
+                        <strong>{file?.name ?? "Uploaded image"}</strong>
+                      </div>
+                      <div className="reportRow">
+                        <span>Result</span>
+                        <strong>{getDisplayedLabel(prediction.label)}</strong>
+                      </div>
+                      <div className="reportRow">
+                        <span>Pneumonia suspicion</span>
+                        <strong>{formatPercent(probabilityPneumonia)}</strong>
+                      </div>
+                      <div className="reportRow">
+                        <span>Confidence</span>
+                        <strong>{formatPercent(modelConfidence)}</strong>
+                      </div>
+                      <div className="reportRow">
+                        <span>Alert level</span>
+                        <strong>{getAlertLevel(probabilityPneumonia)}</strong>
+                      </div>
+                    </div>
+
+                    <div className="reportSection">
+                      <p className="reportSectionTitle">Interpretation</p>
+                      <p className="reportNarrativeText">{getInterpretation(prediction.label, probabilityPneumonia)}</p>
+                    </div>
+
+                    <p className="reportFootnote">
+                      Educational use only. This tool does not replace a radiologist or physician.
+                    </p>
                   </div>
                 ) : null}
               </>
