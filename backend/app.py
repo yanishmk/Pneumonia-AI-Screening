@@ -169,6 +169,25 @@ def build_gradcam_model(layer_name: str):
     return tf.keras.models.Model(inputs=inputs, outputs=[conv_outputs, x], name="gradcam_model")
 
 
+def render_minimal_gradcam_overlay(grayscale: np.ndarray, heatmap: np.ndarray) -> np.ndarray:
+    heatmap = cv2.resize(heatmap, IMAGE_SIZE)
+    heatmap = cv2.GaussianBlur(heatmap, (0, 0), sigmaX=7, sigmaY=7)
+    focus = np.clip((heatmap - 0.18) / 0.82, 0.0, 1.0)
+    focus = np.power(focus, 1.35)
+
+    base_image = cv2.resize(grayscale, IMAGE_SIZE, interpolation=cv2.INTER_AREA)
+    base_image = cv2.cvtColor(base_image, cv2.COLOR_GRAY2BGR).astype(np.float32) / 255.0
+
+    # Subtle single-tone overlay to avoid the noisy rainbow look of JET.
+    accent_bgr = np.array([0.55, 0.72, 0.88], dtype=np.float32)
+    tint = np.ones_like(base_image) * accent_bgr
+    alpha = 0.46 * focus[..., np.newaxis]
+
+    overlay = base_image * (1.0 - alpha) + tint * alpha
+    overlay = np.clip(overlay, 0.0, 1.0)
+    return np.uint8(overlay * 255)
+
+
 def generate_gradcam_overlay(file_bytes: bytes, target_class: int | None = None) -> tuple[str, dict[str, Any]]:
     tf = get_tf()
     image_bgr = decode_image(file_bytes)
@@ -202,11 +221,7 @@ def generate_gradcam_overlay(file_bytes: bytes, target_class: int | None = None)
     heatmap = tf.maximum(heatmap, 0) / (tf.reduce_max(heatmap) + 1e-8)
     heatmap_np = heatmap.numpy()
 
-    heatmap_np = cv2.resize(heatmap_np, IMAGE_SIZE)
-    heatmap_color = cv2.applyColorMap(np.uint8(255 * heatmap_np), cv2.COLORMAP_JET)
-    base_image = cv2.resize(grayscale, IMAGE_SIZE, interpolation=cv2.INTER_AREA)
-    base_image = cv2.cvtColor(base_image, cv2.COLOR_GRAY2BGR)
-    overlay = cv2.addWeighted(base_image, 0.62, heatmap_color, 0.38, 0)
+    overlay = render_minimal_gradcam_overlay(grayscale, heatmap_np)
 
     success, buffer = cv2.imencode(".png", overlay)
 
