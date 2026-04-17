@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Manrope, Space_Grotesk } from "next/font/google";
+import { Manrope, Sora, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
 const bodyFont = Manrope({
@@ -12,9 +12,14 @@ const displayFont = Space_Grotesk({
   variable: "--font-display"
 });
 
+const heroFont = Sora({
+  subsets: ["latin"],
+  variable: "--font-hero"
+});
+
 export const metadata: Metadata = {
-  title: "Pneumonia Detection AI",
-  description: "Chest X-ray pneumonia detection with Next.js, Flask, and TensorFlow"
+  title: "Pneumonia AI Screening",
+  description: "Modern AI-assisted chest X-ray screening and review workspace"
 };
 
 export default function RootLayout({
@@ -24,7 +29,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${bodyFont.variable} ${displayFont.variable}`}>{children}</body>
+      <body className={`${bodyFont.variable} ${displayFont.variable} ${heroFont.variable}`}>{children}</body>
     </html>
   );
 }
