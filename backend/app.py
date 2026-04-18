@@ -108,7 +108,19 @@ def preprocess_image(file_bytes: bytes) -> np.ndarray:
     return preprocess_grayscale_image(grayscale)
 
 
+def enhance_xray_image(image: np.ndarray) -> np.ndarray:
+    # Stabilize low-contrast radiographs before inference.
+    image = cv2.GaussianBlur(image, (3, 3), 0)
+
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(image)
+
+    normalized = cv2.normalize(enhanced, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
+    return normalized.astype(np.uint8)
+
+
 def preprocess_grayscale_image(image: np.ndarray) -> np.ndarray:
+    image = enhance_xray_image(image)
     image = cv2.resize(image, IMAGE_SIZE, interpolation=cv2.INTER_AREA)
     image = image.astype(np.float32) / 255.0
     image = np.expand_dims(image, axis=-1)
