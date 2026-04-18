@@ -25,11 +25,11 @@ MODEL_PATH = Path(os.getenv("MODEL_PATH", "pneumonia_cnn_model.keras"))
 _TF = None
 _MODEL = None
 
-
+#main
 app = Flask(__name__)
 CORS(app)
 
-
+#the get tf function is used to lazily import TensorFlow only when needed, which can help reduce startup time and memory usage if the model is not immediately required. The get_model function loads the Keras model from disk on first use and caches it for subsequent requests. The decode_image function converts uploaded file bytes into an OpenCV image, while validate_xray_candidate checks if the image has characteristics consistent with a chest X-ray. The preprocess_image function prepares the image for model input, and extract_probability_normal retrieves the predicted probability of the "Normal" class from the model's output. The classify function determines the predicted class label based on the probability and a defined threshold. The generate_gradcam_overlay function creates a Grad-CAM visualization overlay for the input image, highlighting areas that contributed to the model's prediction. Finally, Flask routes are defined for health checks, predictions, and Grad-CAM generation, along with error handlers for various exceptions.
 def get_tf():
     global _TF
 

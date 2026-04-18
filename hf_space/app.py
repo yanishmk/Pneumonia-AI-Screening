@@ -9,7 +9,7 @@ import gradio as gr
 import numpy as np
 import tensorflow as tf
 
-
+# Configuration from environment variables with defaults
 MODEL_IMAGE_SIZE = int(os.getenv("MODEL_IMAGE_SIZE", "150"))
 IMAGE_SIZE = (MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE)
 THRESHOLD = float(os.getenv("PREDICTION_THRESHOLD", "0.45"))
@@ -29,7 +29,7 @@ def resolve_model_path() -> Path:
         current_dir / MODEL_FILENAME,
         current_dir.parent / "backend" / MODEL_FILENAME,
     ]
-
+    # Check both the current directory and the backend subdirectory for the model file
     for candidate in candidates:
         if candidate.exists():
             return candidate
