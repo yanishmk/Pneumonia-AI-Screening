@@ -4,6 +4,8 @@ import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, useEffect, useMemo, u
 import type { ApiError, GradcamResult, PredictionResult } from "@/lib/types";
 
 const PUBLIC_BACKEND_URL = process.env.NEXT_PUBLIC_FLASK_API_URL?.trim().replace(/\/$/, "");
+const ACCEPTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const ACCEPTED_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
 
 type PatientInfo = {
   firstName: string;
@@ -97,6 +99,15 @@ function getPatientLabel(patientInfo: PatientInfo) {
 
 function escapePdfText(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+function isSupportedImageFile(file: File) {
+  if (file.type && ACCEPTED_IMAGE_TYPES.has(file.type.toLowerCase())) {
+    return true;
+  }
+
+  const lowerName = file.name.toLowerCase();
+  return ACCEPTED_IMAGE_EXTENSIONS.some((extension) => lowerName.endsWith(extension));
 }
 
 function wrapPdfText(value: string, maxChars: number) {
@@ -419,6 +430,12 @@ export default function HomePage() {
       return;
     }
 
+    if (!isSupportedImageFile(nextFile)) {
+      setFile(null);
+      setError("Unsupported file type. Please upload a PNG, JPG, JPEG, or WEBP image.");
+      return;
+    }
+
     setFile(nextFile);
   }
 
@@ -428,9 +445,11 @@ export default function HomePage() {
   }
 
   function handlePatientInfoChange(field: keyof PatientInfo, value: string) {
+    const nextValue = field === "age" ? value.replace(/[^\d]/g, "").slice(0, 3) : value;
+
     setPatientInfo((current) => ({
       ...current,
-      [field]: value
+      [field]: nextValue
     }));
   }
 
@@ -537,7 +556,7 @@ export default function HomePage() {
     URL.revokeObjectURL(url);
   }
 
-  const analysisHeadline = prediction ? getDisplayedLabel(prediction.label) : "📊 Your results";
+  const analysisHeadline = prediction ? getDisplayedLabel(prediction.label) : "Your results";
   const analysisNarrative = prediction
     ? getInterpretation(prediction.label, probabilityPneumonia)
     : "Upload a chest X-ray and launch the model.";
@@ -662,7 +681,7 @@ export default function HomePage() {
                     <span>Analyzing...</span>
                   </>
                 ) : (
-                  "🚀 Run analysis"
+                  "Run analysis"
                 )}
               </button>
               {file ? <p className="actionHint">Image ready for screening.</p> : null}
@@ -834,7 +853,7 @@ export default function HomePage() {
           <div className="panelHeader">
             <div>
               <p className="sectionKicker">Grad-CAM</p>
-              <h2>🔥 Model focus map</h2>
+              <h2>Model focus map</h2>
             </div>
             <p className="panelMeta">Original image and AI attention overlay</p>
           </div>
