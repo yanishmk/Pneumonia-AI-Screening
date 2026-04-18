@@ -18,8 +18,8 @@ const heroFont = Sora({
 });
 
 export const metadata: Metadata = {
-  title: "Pneumonia AI Screening",
-  description: "Modern AI-assisted chest X-ray screening and review workspace"
+  title: "PneumoAI — Chest X-ray Screening",
+  description: "AI-assisted pneumonia screening with Grad-CAM visual explanations and clinical reports"
 };
 
 export default function RootLayout({
@@ -28,7 +28,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" style={{ colorScheme: "light" }}>
       <body className={`${bodyFont.variable} ${displayFont.variable} ${heroFont.variable}`}>{children}</body>
     </html>
   );
