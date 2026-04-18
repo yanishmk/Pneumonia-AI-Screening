@@ -70,34 +70,43 @@ def decode_image(file_bytes: bytes) -> np.ndarray:
 
 def validate_xray_candidate(image_bgr: np.ndarray) -> np.ndarray:
     height, width = image_bgr.shape[:2]
-    if min(height, width) < 96:
+
+    if min(height, width) < 150:
         raise BadRequest("The image is too small. Please upload a clearer chest X-ray.")
+
+    # Chest X-rays are roughly square to slightly portrait (PA or AP view).
+    aspect = width / height
+    if aspect < 0.55 or aspect > 1.65:
+        raise BadRequest("This image does not look like a chest X-ray. Please upload a frontal chest radiograph.")
 
     gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
     sampled = cv2.resize(gray, (256, 256), interpolation=cv2.INTER_AREA)
 
-    color_delta = 0.0
+    # Reject colored images — X-rays are grayscale.
     if image_bgr.ndim == 3:
         sampled_color = cv2.resize(image_bgr, (256, 256), interpolation=cv2.INTER_AREA).astype(np.float32)
-        blue, green, red = cv2.split(sampled_color)
-        color_delta = float(
-            (
-                np.mean(np.abs(blue - green))
-                + np.mean(np.abs(blue - red))
-                + np.mean(np.abs(green - red))
-            )
-            / 3.0
-        )
+        b, g, r = cv2.split(sampled_color)
+        color_delta = float((np.mean(np.abs(b - g)) + np.mean(np.abs(b - r)) + np.mean(np.abs(g - r))) / 3.0)
+        if color_delta > 14.0:
+            raise BadRequest("This image does not look like a chest X-ray. Please upload a grayscale chest radiograph.")
 
+    # Dynamic range: X-rays span a wide intensity range.
     contrast = float(np.percentile(sampled, 95) - np.percentile(sampled, 5))
+    if contrast < 55.0:
+        raise BadRequest("This image has insufficient contrast. Please upload a proper chest X-ray.")
+
+    # Pixel distribution: chest X-rays have dark lung fields and bright bone/tissue regions.
+    flat = sampled.flatten().astype(np.float32)
+    dark_ratio = float(np.mean(flat < 85))    # lung air → dark pixels
+    bright_ratio = float(np.mean(flat > 155)) # bone / mediastinum → bright pixels
+
+    if dark_ratio < 0.10 or bright_ratio < 0.07:
+        raise BadRequest("This image does not match the expected pixel distribution of a chest X-ray.")
+
+    # Edge density: too sparse = blank image, too dense = document/text.
     edge_ratio = float(np.count_nonzero(cv2.Canny(sampled, 50, 150)) / sampled.size)
-
-    # This is a lightweight heuristic to catch obvious non X-ray uploads.
-    if color_delta > 14.0:
-        raise BadRequest("This image does not look like a chest X-ray. Please upload a grayscale chest radiograph.")
-
-    if contrast < 28.0 or edge_ratio < 0.01:
-        raise BadRequest("This image is not a usable chest X-ray. Please upload a clearer chest radiograph.")
+    if edge_ratio < 0.01 or edge_ratio > 0.28:
+        raise BadRequest("This image does not look like a chest X-ray. Please upload a chest radiograph.")
 
     return gray
 
