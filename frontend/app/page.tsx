@@ -327,6 +327,7 @@ export default function HomePage() {
     lastName: "",
     age: ""
   });
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const probabilityPneumonia = useMemo(() => {
     if (!prediction) {
@@ -489,6 +490,11 @@ export default function HomePage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (!termsAccepted) {
+      setError("Please accept the terms of use before running the analysis.");
+      return;
+    }
+
     if (!patientInfo.firstName.trim() || !patientInfo.lastName.trim() || !patientInfo.age.trim()) {
       setError("Please fill in all patient information before running the analysis.");
       return;
@@ -571,6 +577,18 @@ export default function HomePage() {
           </nav>
 
           <div className="navRight">
+            <a
+              href="https://www.google.com/maps/search/radiologist+near+me"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="navRadiologist"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                <circle cx="12" cy="10" r="3" />
+              </svg>
+              Find a radiologist
+            </a>
             <div className="navStatusPill">
               <span className={`navDot ${prediction ? "navDotLive" : ""}`} aria-hidden="true" />
               <span>{prediction ? "Analysis complete" : "Ready"}</span>
@@ -729,6 +747,16 @@ export default function HomePage() {
                   </div>
                 </div>
               </div>
+
+              <label className="termsRow">
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  className="termsCheckbox"
+                />
+                <span>I understand this tool is for educational use only and does not replace a medical professional.</span>
+              </label>
 
               <div className="actionBar">
                 <button className="analyzeButton" type="submit" disabled={!file || isLoading}>
@@ -1061,7 +1089,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <p className="footerNote">© 2025 PneumoAI · Educational use only · Not a medical device</p>
+        <p className="footerNote">© {new Date().getFullYear()} PneumoAI · Educational use only · Not a medical device</p>
       </main>
     </>
   );
