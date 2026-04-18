@@ -113,6 +113,27 @@ img {
   text-transform: uppercase;
 }
 
+.navLinks {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.navLink {
+  padding: 6px 12px;
+  border-radius: 8px;
+  color: var(--text-2);
+  font-size: 0.84rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.navLink:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
 .navRight {
   display: flex;
   align-items: center;
@@ -202,15 +223,6 @@ img {
   background: var(--surface);
   box-shadow: var(--shadow-sm);
   position: relative;
-}
-
-.howNum {
-  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: var(--accent);
-  margin-bottom: 14px;
 }
 
 .howIcon {
@@ -1217,6 +1229,58 @@ img {
   font-size: 0.78rem;
 }
 
+/* ─── ABOUT ──────────────────────────────────────────────────────── */
+
+.aboutSection {
+  margin-top: 48px;
+  padding: 36px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.aboutGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px;
+}
+
+.aboutTitle {
+  margin: 0 0 10px;
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.aboutSubtitle {
+  margin: 0 0 10px;
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.aboutText {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.84rem;
+  line-height: 1.7;
+}
+
+.aboutLink {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.aboutLink:hover {
+  text-decoration: underline;
+}
+
 /* ─── INLINE CODE ────────────────────────────────────────────────── */
 
 code {
@@ -1278,8 +1342,13 @@ code {
 }
 
 @media (max-width: 820px) {
-  .howGrid {
+  .howGrid,
+  .aboutGrid {
     grid-template-columns: 1fr;
+  }
+
+  .navLinks {
+    display: none;
   }
 
   .pageShell {

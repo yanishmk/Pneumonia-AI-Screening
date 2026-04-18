@@ -489,6 +489,11 @@ export default function HomePage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (!patientInfo.firstName.trim() || !patientInfo.lastName.trim() || !patientInfo.age.trim()) {
+      setError("Please fill in all patient information before running the analysis.");
+      return;
+    }
+
     if (!file) {
       setError("Upload a chest X-ray image first.");
       return;
@@ -559,12 +564,17 @@ export default function HomePage() {
             <span className="brandBeta">Beta</span>
           </div>
 
+          <nav className="navLinks" aria-label="Page navigation">
+            <a href="#how" className="navLink">How it works</a>
+            <a href="#faq" className="navLink">FAQ</a>
+            <a href="#about" className="navLink">About</a>
+          </nav>
+
           <div className="navRight">
             <div className="navStatusPill">
               <span className={`navDot ${prediction ? "navDotLive" : ""}`} aria-hidden="true" />
               <span>{prediction ? "Analysis complete" : "Ready"}</span>
             </div>
-            <span className="navVersion">v1.0</span>
           </div>
         </div>
       </nav>
@@ -581,10 +591,10 @@ export default function HomePage() {
         </section>
 
         {/* ── HOW IT WORKS ── */}
-        <section className="howSection">
+        <section className="howSection" id="how">
           <div className="howGrid">
             <div className="howCard">
-              <div className="howNum">01</div>
+
               <div className="howIcon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -597,7 +607,7 @@ export default function HomePage() {
             </div>
 
             <div className="howCard">
-              <div className="howNum">02</div>
+
               <div className="howIcon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="3" />
@@ -609,7 +619,7 @@ export default function HomePage() {
             </div>
 
             <div className="howCard">
-              <div className="howNum">03</div>
+
               <div className="howIcon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -980,7 +990,7 @@ export default function HomePage() {
         </section>
 
         {/* ── FAQ ── */}
-        <section className="faqSection">
+        <section className="faqSection" id="faq">
           <h2 className="faqTitle">Frequently asked questions</h2>
           <div className="faqList">
             <details className="faqItem">
@@ -1033,7 +1043,25 @@ export default function HomePage() {
           </div>
         </section>
 
-        <p className="footerNote">Educational use only · Not a medical device · Results must be confirmed by a qualified professional.</p>
+        {/* ── ABOUT ── */}
+        <section className="aboutSection" id="about">
+          <div className="aboutGrid">
+            <div>
+              <h2 className="aboutTitle">About PneumoAI</h2>
+              <p className="aboutText">PneumoAI is an educational AI screening tool that analyzes chest X-ray images for signs of pneumonia. It is designed for research and learning purposes only.</p>
+            </div>
+            <div>
+              <h3 className="aboutSubtitle">Disclaimer</h3>
+              <p className="aboutText">This tool is not a certified medical device. Results must always be confirmed by a qualified radiologist or physician. Do not use for clinical diagnosis.</p>
+            </div>
+            <div>
+              <h3 className="aboutSubtitle">Contact</h3>
+              <p className="aboutText">For questions or feedback, contact us at <a href="mailto:yanishamek14@gmail.com" className="aboutLink">yanishamek14@gmail.com</a></p>
+            </div>
+          </div>
+        </section>
+
+        <p className="footerNote">© 2025 PneumoAI · Educational use only · Not a medical device</p>
       </main>
     </>
   );
