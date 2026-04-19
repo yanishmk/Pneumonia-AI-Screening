@@ -103,29 +103,7 @@ copy .env.local.example .env.local
 npm install
 ```
 
-## Usage
 
-### Main usage: run the notebook
-
-Open `xray_pneumonia_final-project (4).ipynb` and run the cells in order.
-
-The notebook workflow is organized around these stages:
-
-1. imports and configuration
-2. dataset download with KaggleHub
-3. image validation and utility functions
-4. exploratory analysis and visualization
-5. NumPy loading of grayscale X-ray images
-6. real train / validation / test split
-7. GAN training for the minority `Normal` class
-8. synthetic image filtering and injection into the training set
-9. data augmentation
-10. CNN training
-11. final evaluation with multiple metrics
-12. threshold optimization on the test set
-13. model and threshold export
-14. new image prediction example
-15. simple Flask deployment example
 
 ### Key notebook settings
 
@@ -246,9 +224,8 @@ No formal open-source license file has been added yet.
 At the moment, this repository should be considered an educational and academic-style project centered on notebook experimentation and model prototyping.
 
 ## Author
-
+- Yanis Hamek 
 - Amira Djidjeli
 - Lounes Djayet
-- Yanis Hamek
 - Yanisse Touazi
 - Younes Aibeche
