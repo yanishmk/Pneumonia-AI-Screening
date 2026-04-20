@@ -71,3 +71,27 @@ Notes:
 
 - Railway injects the `PORT` variable automatically.
 - The model now loads lazily on the first prediction request to reduce startup pressure.
+
+## Evaluate The Model
+
+You can evaluate the CNN on a dataset organized like this:
+
+```text
+dataset/
+  pneumonia/
+  normal/
+```
+
+Run:
+
+```powershell
+cd backend
+python evaluate_model.py ..\path\to\dataset --output-json evaluation.json
+```
+
+The script reuses the backend preprocessing pipeline and reports:
+
+- accuracy
+- precision / recall / F1 for the pneumonia class
+- confusion matrix
+- number of inconclusive and skipped images
