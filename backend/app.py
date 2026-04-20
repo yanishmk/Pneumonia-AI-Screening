@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 MODEL_IMAGE_SIZE = int(os.getenv("MODEL_IMAGE_SIZE", "150"))
 IMAGE_SIZE = (MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE)
 THRESHOLD = float(os.getenv("PREDICTION_THRESHOLD", "0.45"))
+INCONCLUSIVE_MARGIN = float(os.getenv("INCONCLUSIVE_MARGIN", "0.08"))
 MODEL_PATH = Path(os.getenv("MODEL_PATH", "pneumonia_cnn_model.keras"))
 _TF = None
 _MODEL = None
@@ -144,10 +145,34 @@ def extract_probability_normal(prediction: Any) -> float:
     return min(max(probability_normal, 0.0), 1.0)
 
 
-def classify(probability_normal: float) -> tuple[int, str]:
+def classify(probability_normal: float) -> tuple[int, str, bool]:
+    if abs(probability_normal - THRESHOLD) <= INCONCLUSIVE_MARGIN:
+        return -1, "Inconclusive", True
+
     predicted_class = 1 if probability_normal >= THRESHOLD else 0
     label = "Normal" if predicted_class == 1 else "Pneumonia"
-    return predicted_class, label
+    return predicted_class, label, False
+
+
+def gradcam_target_class(probability_normal: float, predicted_class: int) -> int:
+    if predicted_class in (0, 1):
+        return predicted_class
+
+    return 1 if probability_normal >= 0.5 else 0
+
+
+def build_prediction_payload(probability_normal: float) -> dict[str, Any]:
+    predicted_class, label, is_inconclusive = classify(probability_normal)
+
+    return {
+        "label": label,
+        "predicted_class": predicted_class,
+        "probability_normal": probability_normal,
+        "threshold": THRESHOLD,
+        "inconclusive_margin": INCONCLUSIVE_MARGIN,
+        "is_inconclusive": is_inconclusive,
+        "review_recommendation": "Needs review" if is_inconclusive else "Standard review",
+    }
 
 
 def get_last_conv_layer_name() -> str:
@@ -193,8 +218,8 @@ def generate_gradcam_overlay(file_bytes: bytes, target_class: int | None = None)
     with tf.GradientTape() as tape:
         conv_outputs, predictions = grad_model(preprocessed, training=False)
         probability_normal = extract_probability_normal(predictions)
-        inferred_class, label = classify(probability_normal)
-        class_index = inferred_class if target_class is None else target_class
+        inferred_class, label, is_inconclusive = classify(probability_normal)
+        class_index = gradcam_target_class(probability_normal, inferred_class) if target_class is None else target_class
 
         if class_index == 1:
             class_score = tf.reshape(predictions, (-1,))[-1]
@@ -230,6 +255,9 @@ def generate_gradcam_overlay(file_bytes: bytes, target_class: int | None = None)
         "predicted_class": inferred_class,
         "probability_normal": probability_normal,
         "threshold": THRESHOLD,
+        "inconclusive_margin": INCONCLUSIVE_MARGIN,
+        "is_inconclusive": is_inconclusive,
+        "review_recommendation": "Needs review" if is_inconclusive else "Standard review",
         "gradcam_layer": layer_name,
         "target_class": class_index,
     }
@@ -247,6 +275,7 @@ def health() -> tuple[Any, int]:
             "model_exists": MODEL_PATH.exists(),
             "image_size": MODEL_IMAGE_SIZE,
             "threshold": THRESHOLD,
+            "inconclusive_margin": INCONCLUSIVE_MARGIN,
         }
     ), 200
 
@@ -275,16 +304,7 @@ def predict() -> tuple[Any, int]:
     image = preprocess_image(uploaded_file.read())
     prediction = get_model().predict(image, verbose=0)
     probability_normal = extract_probability_normal(prediction)
-    predicted_class, label = classify(probability_normal)
-
-    return jsonify(
-        {
-            "label": label,
-            "predicted_class": predicted_class,
-            "probability_normal": probability_normal,
-            "threshold": THRESHOLD,
-        }
-    ), 200
+    return jsonify(build_prediction_payload(probability_normal)), 200
 
 
 @app.post("/gradcam")

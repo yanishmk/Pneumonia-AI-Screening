@@ -13,6 +13,7 @@ import tensorflow as tf
 MODEL_IMAGE_SIZE = int(os.getenv("MODEL_IMAGE_SIZE", "150"))
 IMAGE_SIZE = (MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE)
 THRESHOLD = float(os.getenv("PREDICTION_THRESHOLD", "0.45"))
+INCONCLUSIVE_MARGIN = float(os.getenv("INCONCLUSIVE_MARGIN", "0.08"))
 MODEL_FILENAME = "pneumonia_cnn_model.keras"
 GRADCAM_LAYER = os.getenv("GRADCAM_LAYER")
 
@@ -113,6 +114,9 @@ def validate_xray_candidate(image_bgr: np.ndarray) -> np.ndarray:
 
 
 def preprocess_grayscale_image(image: np.ndarray) -> np.ndarray:
+    image = cv2.GaussianBlur(image, (3, 3), 0)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    image = clahe.apply(image)
     image = cv2.resize(image, IMAGE_SIZE, interpolation=cv2.INTER_AREA)
     image = image.astype(np.float32) / 255.0
     image = np.expand_dims(image, axis=-1)
@@ -134,10 +138,20 @@ def extract_probability_normal(prediction: Any) -> float:
     return min(max(probability_normal, 0.0), 1.0)
 
 
-def classify(probability_normal: float) -> tuple[int, str]:
+def classify(probability_normal: float) -> tuple[int, str, bool]:
+    if abs(probability_normal - THRESHOLD) <= INCONCLUSIVE_MARGIN:
+        return -1, "Inconclusive", True
+
     predicted_class = 1 if probability_normal >= THRESHOLD else 0
     label = "Normal appearance" if predicted_class == 1 else "Pneumonia suspicion"
-    return predicted_class, label
+    return predicted_class, label, False
+
+
+def gradcam_target_class(probability_normal: float, predicted_class: int) -> int:
+    if predicted_class in (0, 1):
+        return predicted_class
+
+    return 1 if probability_normal >= 0.5 else 0
 
 
 def confidence_label(confidence: float) -> str:
@@ -149,6 +163,8 @@ def confidence_label(confidence: float) -> str:
 
 
 def triage_label(predicted_class: int, confidence: float) -> str:
+    if predicted_class == -1:
+        return "Needs review"
     if predicted_class == 1:
         return "Routine review"
     if confidence >= 0.9:
@@ -192,8 +208,8 @@ def generate_gradcam_overlay(grayscale: np.ndarray, target_class: int | None = N
     with tf.GradientTape() as tape:
         conv_outputs, predictions = grad_model(preprocessed, training=False)
         probability_normal = extract_probability_normal(predictions)
-        inferred_class, _ = classify(probability_normal)
-        class_index = inferred_class if target_class is None else target_class
+        inferred_class, _, _ = classify(probability_normal)
+        class_index = gradcam_target_class(probability_normal, inferred_class) if target_class is None else target_class
         flattened = tf.reshape(predictions, (-1,))
 
         if class_index == 1:
@@ -223,7 +239,13 @@ def generate_gradcam_overlay(grayscale: np.ndarray, target_class: int | None = N
     return cv2.cvtColor(overlay_bgr, cv2.COLOR_BGR2RGB), layer_name
 
 
-def summarize_result(label: str, predicted_class: int, confidence: float) -> str:
+def summarize_result(label: str, predicted_class: int, confidence: float, is_inconclusive: bool) -> str:
+    if is_inconclusive:
+        return (
+            f"Model output: {label}. Confidence is {confidence_label(confidence).lower()}, "
+            "and the score sits close to the decision threshold, so this image should receive human review."
+        )
+
     if predicted_class == 1:
         return (
             f"Model output: {label}. Confidence is {confidence_label(confidence).lower()} "
@@ -245,14 +267,14 @@ def analyze_image(image: np.ndarray | None) -> tuple[str, str, str, str, str, np
     preprocessed = preprocess_grayscale_image(grayscale)
     prediction = get_model().predict(preprocessed, verbose=0)
     probability_normal = extract_probability_normal(prediction)
-    predicted_class, label = classify(probability_normal)
+    predicted_class, label, is_inconclusive = classify(probability_normal)
     confidence = max(probability_normal, 1.0 - probability_normal)
     original_preview = cv2.cvtColor(cv2.resize(grayscale, IMAGE_SIZE), cv2.COLOR_GRAY2RGB)
     gradcam_overlay, layer_name = generate_gradcam_overlay(grayscale, target_class=predicted_class)
 
     suspicion_score = 1.0 - probability_normal
 
-    summary = summarize_result(label, predicted_class, confidence)
+    summary = summarize_result(label, predicted_class, confidence, is_inconclusive)
     confidence_text = f"{confidence * 100:.1f}% ({confidence_label(confidence)})"
     suspicion_text = f"{suspicion_score * 100:.1f}%"
     triage_text = triage_label(predicted_class, confidence)

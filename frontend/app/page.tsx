@@ -53,10 +53,22 @@ function formatReportDate(date: Date) {
 }
 
 function getDisplayedLabel(label: PredictionResult["label"]) {
-  return label === "Normal" ? "Normal appearance" : "Pneumonia suspicion";
+  if (label === "Normal") {
+    return "Normal appearance";
+  }
+
+  if (label === "Pneumonia") {
+    return "Pneumonia suspicion";
+  }
+
+  return "Inconclusive result";
 }
 
-function getAlertLevel(probabilityPneumonia: number) {
+function getAlertLevel(probabilityPneumonia: number, isInconclusive: boolean) {
+  if (isInconclusive) {
+    return "Review";
+  }
+
   if (probabilityPneumonia >= 0.8) {
     return "High";
   }
@@ -68,7 +80,13 @@ function getAlertLevel(probabilityPneumonia: number) {
   return "Low";
 }
 
-function getInterpretation(label: PredictionResult["label"], probabilityPneumonia: number) {
+function getInterpretation(prediction: PredictionResult, probabilityPneumonia: number) {
+  if (prediction.is_inconclusive) {
+    return "The model score is too close to the decision threshold to support a confident screening label. Clinical review is recommended.";
+  }
+
+  const { label } = prediction;
+
   if (label === "Normal") {
     return "No strong pneumonia pattern was flagged by the model on this image.";
   }
@@ -364,8 +382,8 @@ export default function HomePage() {
     const patientLabel = getPdfSafeValue(getPatientLabel(patientInfo));
     const imageLabel = getPdfSafeValue(file?.name ?? "Uploaded image");
     const reportSummary = getDisplayedLabel(prediction.label);
-    const alertLevel = getAlertLevel(probabilityPneumonia);
-    const interpretation = getInterpretation(prediction.label, probabilityPneumonia);
+    const alertLevel = getAlertLevel(probabilityPneumonia, prediction.is_inconclusive);
+    const interpretation = getInterpretation(prediction, probabilityPneumonia);
 
     return {
       title: "Pneumonia AI Screening Report",
@@ -558,7 +576,7 @@ export default function HomePage() {
 
   const analysisHeadline = prediction ? getDisplayedLabel(prediction.label) : "Your results";
   const analysisNarrative = prediction
-    ? getInterpretation(prediction.label, probabilityPneumonia)
+    ? getInterpretation(prediction, probabilityPneumonia)
     : "Upload a chest X-ray and launch the model.";
   const shouldShowResultPanel = hasAnalysisRun;
 
@@ -695,8 +713,10 @@ export default function HomePage() {
                   <h2>{analysisHeadline}</h2>
                 </div>
                 {prediction ? (
-                  <span className={`resultTone ${prediction.label === "Normal" ? "resultToneNormal" : "resultToneAlert"}`}>
-                    {getAlertLevel(probabilityPneumonia)}
+                  <span
+                    className={`resultTone ${prediction.label === "Normal" && !prediction.is_inconclusive ? "resultToneNormal" : "resultToneAlert"}`}
+                  >
+                    {getAlertLevel(probabilityPneumonia, prediction.is_inconclusive)}
                   </span>
                 ) : null}
               </div>
@@ -720,6 +740,10 @@ export default function HomePage() {
                     <div className="metricRow">
                       <span>Class</span>
                       <strong>{prediction.label}</strong>
+                    </div>
+                    <div className="metricRow">
+                      <span>Review</span>
+                      <strong>{prediction.review_recommendation}</strong>
                     </div>
                   </div>
 
@@ -753,7 +777,9 @@ export default function HomePage() {
                         </div>
                         <div className="reportPreviewMeta">
                           <span>{reportData.generatedAt}</span>
-                          <span className={`reportBadge ${prediction.label === "Normal" ? "reportBadgeNormal" : "reportBadgeAlert"}`}>
+                          <span
+                            className={`reportBadge ${prediction.label === "Normal" && !prediction.is_inconclusive ? "reportBadgeNormal" : "reportBadgeAlert"}`}
+                          >
                             {reportData.alertLevel} attention
                           </span>
                         </div>
@@ -796,6 +822,10 @@ export default function HomePage() {
                             <strong>{getDisplayedLabel(prediction.label)}</strong>
                           </div>
                           <div className="reportRow">
+                            <span>Review</span>
+                            <strong>{prediction.review_recommendation}</strong>
+                          </div>
+                          <div className="reportRow">
                             <span>Pneumonia suspicion</span>
                             <strong>{formatPercent(probabilityPneumonia)}</strong>
                           </div>
@@ -805,14 +835,14 @@ export default function HomePage() {
                           </div>
                           <div className="reportRow">
                             <span>Alert level</span>
-                            <strong>{getAlertLevel(probabilityPneumonia)}</strong>
+                            <strong>{getAlertLevel(probabilityPneumonia, prediction.is_inconclusive)}</strong>
                           </div>
                         </div>
                       </div>
 
                       <div className="reportSection">
                         <p className="reportSectionTitle">Interpretation</p>
-                        <p className="reportNarrativeText">{getInterpretation(prediction.label, probabilityPneumonia)}</p>
+                        <p className="reportNarrativeText">{getInterpretation(prediction, probabilityPneumonia)}</p>
                       </div>
 
                       <p className="reportFootnote">
