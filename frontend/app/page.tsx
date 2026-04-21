@@ -1,9 +1,14 @@
 "use client";
 
 import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ACCEPTED_IMAGE_TYPES,
+  isAcceptedImageFile,
+  MAX_FILE_SIZE_BYTES,
+  MAX_FILE_SIZE_LABEL,
+  PUBLIC_BACKEND_URL
+} from "@/lib/api";
 import type { ApiError, GradcamResult, PredictionResult } from "@/lib/types";
-
-const PUBLIC_BACKEND_URL = process.env.NEXT_PUBLIC_FLASK_API_URL?.trim().replace(/\/$/, "");
 
 type PatientInfo = {
   firstName: string;
@@ -93,6 +98,28 @@ function getPatientLabel(patientInfo: PatientInfo) {
   const parts = [name, age ? `${age} years` : ""].filter(Boolean);
 
   return parts.length > 0 ? parts.join(" | ") : "Patient details pending";
+}
+
+function getAllowedFileTypesLabel() {
+  return ACCEPTED_IMAGE_TYPES.map((type) => type.replace("image/", ".")).join(", ");
+}
+
+function sanitizeAgeInput(value: string) {
+  return value.replace(/\D/g, "").slice(0, 3);
+}
+
+function validatePatientInfo(patientInfo: PatientInfo) {
+  if (!patientInfo.firstName.trim() || !patientInfo.lastName.trim() || !patientInfo.age.trim()) {
+    return "Please fill in all patient information before running the analysis.";
+  }
+
+  const age = Number(patientInfo.age);
+
+  if (!Number.isInteger(age) || age < 1 || age > 120) {
+    return "Please enter a valid patient age between 1 and 120.";
+  }
+
+  return null;
 }
 
 function escapePdfText(value: string) {
@@ -389,6 +416,16 @@ export default function HomePage() {
     };
   }, [file?.name, modelConfidence, patientInfo, prediction, probabilityPneumonia]);
 
+  const patientValidationMessage = validatePatientInfo(patientInfo);
+  const isFormReady = Boolean(file) && !patientValidationMessage && termsAccepted;
+  const actionMessage = !file
+    ? "Upload a chest X-ray to enable analysis."
+    : patientValidationMessage
+      ? patientValidationMessage
+      : !termsAccepted
+        ? "Accept the educational-use terms to continue."
+        : "Image and patient details are ready.";
+
   useEffect(() => {
     if (!file) {
       setPreviewUrl(null);
@@ -420,6 +457,18 @@ export default function HomePage() {
       return;
     }
 
+    if (!isAcceptedImageFile(nextFile)) {
+      setFile(null);
+      setError(`Unsupported file type. Please upload ${getAllowedFileTypesLabel()} image files.`);
+      return;
+    }
+
+    if (nextFile.size > MAX_FILE_SIZE_BYTES) {
+      setFile(null);
+      setError(`File is too large. Please upload an image under ${MAX_FILE_SIZE_LABEL}.`);
+      return;
+    }
+
     setFile(nextFile);
   }
 
@@ -431,7 +480,7 @@ export default function HomePage() {
   function handlePatientInfoChange(field: keyof PatientInfo, value: string) {
     setPatientInfo((current) => ({
       ...current,
-      [field]: value
+      [field]: field === "age" ? sanitizeAgeInput(value) : value
     }));
   }
 
@@ -495,8 +544,10 @@ export default function HomePage() {
       return;
     }
 
-    if (!patientInfo.firstName.trim() || !patientInfo.lastName.trim() || !patientInfo.age.trim()) {
-      setError("Please fill in all patient information before running the analysis.");
+    const patientValidationError = validatePatientInfo(patientInfo);
+
+    if (patientValidationError) {
+      setError(patientValidationError);
       return;
     }
 
@@ -691,9 +742,14 @@ export default function HomePage() {
                     value={patientInfo.age}
                     onChange={(event) => handlePatientInfoChange("age", event.target.value)}
                     placeholder="Age"
+                    maxLength={3}
                   />
                 </label>
               </div>
+
+              <p className="fieldHelper">
+                Fill in the patient details before analysis. Age must be between 1 and 120.
+              </p>
 
               <div className="uploadStage">
                 <div
@@ -709,10 +765,15 @@ export default function HomePage() {
                   onDragLeave={() => setIsDragging(false)}
                   onDrop={handleDrop}
                 >
-                  <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} />
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept={ACCEPTED_IMAGE_TYPES.join(",")}
+                    onChange={handleFileChange}
+                  />
                   <span className="dropzoneIcon" aria-hidden="true">+</span>
                   <strong>{file ? file.name : "Drop image or click to browse"}</strong>
-                  <small>Best with frontal chest X-ray images.</small>
+                  <small>Best with frontal chest X-ray images in PNG, JPG, or WEBP under {MAX_FILE_SIZE_LABEL}.</small>
                   <button
                     className="primaryButton"
                     type="button"
@@ -759,7 +820,7 @@ export default function HomePage() {
               </label>
 
               <div className="actionBar">
-                <button className="analyzeButton" type="submit" disabled={!file || isLoading}>
+                <button className="analyzeButton" type="submit" disabled={!isFormReady || isLoading}>
                   {isLoading ? (
                     <>
                       <span className="buttonSpinner" aria-hidden="true" />
@@ -769,12 +830,10 @@ export default function HomePage() {
                     "Run analysis"
                   )}
                 </button>
-                {file ? (
-                  <p className="actionHint">
-                    <span className="actionHintDot" aria-hidden="true" />
-                    Image ready
-                  </p>
-                ) : null}
+                <p className={`actionHint ${isFormReady ? "actionHintReady" : ""}`}>
+                  <span className="actionHintDot" aria-hidden="true" />
+                  {actionMessage}
+                </p>
               </div>
             </section>
 

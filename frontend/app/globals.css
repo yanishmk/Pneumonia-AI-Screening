@@ -363,6 +363,13 @@ img {
   max-width: 140px;
 }
 
+.fieldHelper {
+  margin: 0 0 18px;
+  color: var(--text-2);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
 /* Upload stage */
 .uploadStage {
   display: grid;
@@ -542,8 +549,16 @@ img {
   width: 5px;
   height: 5px;
   border-radius: 999px;
-  background: var(--success);
+  background: var(--text-3);
   flex: none;
+}
+
+.actionHintReady {
+  color: var(--text);
+}
+
+.actionHintReady .actionHintDot {
+  background: var(--success);
 }
 
 /* ─── BUTTONS ───────────────────────────────────────────────────────── */

@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from werkzeug.datastructures import FileStorage
 from werkzeug.exceptions import BadRequest, HTTPException
 
 if TYPE_CHECKING:
@@ -19,8 +20,11 @@ MODEL_IMAGE_SIZE = int(os.getenv("MODEL_IMAGE_SIZE", "150"))
 IMAGE_SIZE = (MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE)
 THRESHOLD = float(os.getenv("PREDICTION_THRESHOLD", "0.45"))
 MODEL_PATH = Path(os.getenv("MODEL_PATH", "pneumonia_cnn_model.keras"))
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(8 * 1024 * 1024)))
+ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 _TF = None
 _MODEL = None
+_GRADCAM_MODELS: dict[str, Any] = {}
 
 
 app = Flask(__name__)
@@ -56,6 +60,61 @@ def get_model():
         _MODEL = load_keras_model()
 
     return _MODEL
+
+
+def get_gradcam_model(layer_name: str):
+    cached = _GRADCAM_MODELS.get(layer_name)
+
+    if cached is None:
+        cached = build_gradcam_model(layer_name)
+        _GRADCAM_MODELS[layer_name] = cached
+
+    return cached
+
+
+def validate_file_extension(filename: str) -> None:
+    suffix = Path(filename).suffix.lower()
+
+    if suffix not in ALLOWED_EXTENSIONS:
+        allowed = ", ".join(sorted(ALLOWED_EXTENSIONS))
+        raise BadRequest(f"Unsupported file type. Please upload one of: {allowed}.")
+
+
+def read_uploaded_image_bytes() -> bytes:
+    if "file" not in request.files:
+        raise BadRequest("Missing image file. Send multipart/form-data with a 'file' field.")
+
+    uploaded_file: FileStorage = request.files["file"]
+
+    if uploaded_file.filename == "":
+        raise BadRequest("No file was selected.")
+
+    validate_file_extension(uploaded_file.filename)
+    file_bytes = uploaded_file.read()
+
+    if not file_bytes:
+        raise BadRequest("The uploaded file is empty.")
+
+    if len(file_bytes) > MAX_UPLOAD_BYTES:
+        max_size_mb = MAX_UPLOAD_BYTES / (1024 * 1024)
+        raise BadRequest(f"File is too large. Please upload an image under {max_size_mb:.0f} MB.")
+
+    return file_bytes
+
+
+def parse_target_class(value: str | None) -> int | None:
+    if value in (None, ""):
+        return None
+
+    try:
+        target_class = int(value)
+    except ValueError as exc:
+        raise BadRequest("target_class must be 0 for Pneumonia or 1 for Normal.") from exc
+
+    if target_class not in (0, 1):
+        raise BadRequest("target_class must be 0 for Pneumonia or 1 for Normal.")
+
+    return target_class
 
 
 def decode_image(file_bytes: bytes) -> np.ndarray:
@@ -185,7 +244,7 @@ def generate_gradcam_overlay(file_bytes: bytes, target_class: int | None = None)
 
     preprocessed = preprocess_grayscale_image(grayscale)
     layer_name = os.getenv("GRADCAM_LAYER") or get_last_conv_layer_name()
-    grad_model = build_gradcam_model(layer_name)
+    grad_model = get_gradcam_model(layer_name)
 
     with tf.GradientTape() as tape:
         conv_outputs, predictions = grad_model(preprocessed, training=False)
@@ -242,8 +301,11 @@ def health() -> tuple[Any, int]:
             "model_path": str(MODEL_PATH),
             "model_loaded": _MODEL is not None,
             "model_exists": MODEL_PATH.exists(),
+            "gradcam_model_cache_size": len(_GRADCAM_MODELS),
             "image_size": MODEL_IMAGE_SIZE,
             "threshold": THRESHOLD,
+            "max_upload_bytes": MAX_UPLOAD_BYTES,
+            "allowed_extensions": sorted(ALLOWED_EXTENSIONS),
         }
     ), 200
 
@@ -261,15 +323,7 @@ def index() -> tuple[Any, int]:
 
 @app.post("/predict")
 def predict() -> tuple[Any, int]:
-    if "file" not in request.files:
-        raise BadRequest("Missing image file. Send multipart/form-data with a 'file' field.")
-
-    uploaded_file = request.files["file"]
-
-    if uploaded_file.filename == "":
-        raise BadRequest("No file was selected.")
-
-    image = preprocess_image(uploaded_file.read())
+    image = preprocess_image(read_uploaded_image_bytes())
     prediction = get_model().predict(image, verbose=0)
     probability_normal = extract_probability_normal(prediction)
     predicted_class, label = classify(probability_normal)
@@ -286,21 +340,8 @@ def predict() -> tuple[Any, int]:
 
 @app.post("/gradcam")
 def gradcam() -> tuple[Any, int]:
-    if "file" not in request.files:
-        raise BadRequest("Missing image file. Send multipart/form-data with a 'file' field.")
-
-    uploaded_file = request.files["file"]
-
-    if uploaded_file.filename == "":
-        raise BadRequest("No file was selected.")
-
-    target_class_value = request.form.get("target_class")
-    try:
-        target_class = int(target_class_value) if target_class_value not in (None, "") else None
-    except ValueError as exc:
-        raise BadRequest("target_class must be 0 for Pneumonia or 1 for Normal.") from exc
-
-    overlay_base64, metadata = generate_gradcam_overlay(uploaded_file.read(), target_class)
+    target_class = parse_target_class(request.form.get("target_class"))
+    overlay_base64, metadata = generate_gradcam_overlay(read_uploaded_image_bytes(), target_class)
 
     return jsonify({"gradcam_image_base64": overlay_base64, **metadata}), 200
 
