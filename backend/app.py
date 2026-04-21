@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -18,8 +19,8 @@ if TYPE_CHECKING:
 
 MODEL_IMAGE_SIZE = int(os.getenv("MODEL_IMAGE_SIZE", "150"))
 IMAGE_SIZE = (MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE)
-THRESHOLD = float(os.getenv("PREDICTION_THRESHOLD", "0.45"))
 MODEL_PATH = Path(os.getenv("MODEL_PATH", "pneumonia_cnn_model.keras"))
+THRESHOLD_PATH = Path(os.getenv("THRESHOLD_PATH", "pneumonia_threshold.json"))
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(8 * 1024 * 1024)))
 ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 _TF = None
@@ -42,6 +43,20 @@ def get_tf():
     return _TF
 
 
+def load_threshold() -> float:
+    env_threshold = os.getenv("PREDICTION_THRESHOLD")
+    if env_threshold is not None:
+        return float(env_threshold)
+
+    if THRESHOLD_PATH.exists():
+        payload = json.loads(THRESHOLD_PATH.read_text(encoding="utf-8"))
+        if "threshold" not in payload:
+            raise ValueError(f"Threshold file '{THRESHOLD_PATH}' must contain a 'threshold' field.")
+        return float(payload["threshold"])
+
+    return 0.45
+
+
 def load_keras_model():
     if not MODEL_PATH.exists():
         raise FileNotFoundError(
@@ -51,6 +66,9 @@ def load_keras_model():
 
     tf = get_tf()
     return tf.keras.models.load_model(MODEL_PATH)
+
+
+THRESHOLD = load_threshold()
 
 
 def get_model():
@@ -304,6 +322,8 @@ def health() -> tuple[Any, int]:
             "gradcam_model_cache_size": len(_GRADCAM_MODELS),
             "image_size": MODEL_IMAGE_SIZE,
             "threshold": THRESHOLD,
+            "threshold_source": "env" if os.getenv("PREDICTION_THRESHOLD") is not None else ("file" if THRESHOLD_PATH.exists() else "default"),
+            "threshold_path": str(THRESHOLD_PATH),
             "max_upload_bytes": MAX_UPLOAD_BYTES,
             "allowed_extensions": sorted(ALLOWED_EXTENSIONS),
         }

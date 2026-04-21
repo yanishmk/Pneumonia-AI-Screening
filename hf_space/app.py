@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -12,9 +13,9 @@ import tensorflow as tf
 
 MODEL_IMAGE_SIZE = int(os.getenv("MODEL_IMAGE_SIZE", "150"))
 IMAGE_SIZE = (MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE)
-THRESHOLD = float(os.getenv("PREDICTION_THRESHOLD", "0.45"))
 MODEL_FILENAME = "pneumonia_cnn_model.keras"
 GRADCAM_LAYER = os.getenv("GRADCAM_LAYER")
+THRESHOLD_FILENAME = "pneumonia_threshold.json"
 MAX_IMAGE_PIXELS = int(os.getenv("MAX_IMAGE_PIXELS", str(12_000_000)))
 MIN_IMAGE_DIMENSION = int(os.getenv("MIN_IMAGE_DIMENSION", "96"))
 
@@ -40,7 +41,43 @@ def resolve_model_path() -> Path:
     return candidates[0]
 
 
+def resolve_threshold_path() -> Path:
+    override = os.getenv("THRESHOLD_PATH")
+    if override:
+        return Path(override)
+
+    current_dir = Path(__file__).resolve().parent
+    candidates = [
+        current_dir / THRESHOLD_FILENAME,
+        current_dir.parent / "backend" / THRESHOLD_FILENAME,
+    ]
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    return candidates[0]
+
+
 MODEL_PATH = resolve_model_path()
+THRESHOLD_PATH = resolve_threshold_path()
+
+
+def load_threshold() -> float:
+    env_threshold = os.getenv("PREDICTION_THRESHOLD")
+    if env_threshold is not None:
+        return float(env_threshold)
+
+    if THRESHOLD_PATH.exists():
+        payload = json.loads(THRESHOLD_PATH.read_text(encoding="utf-8"))
+        if "threshold" not in payload:
+            raise ValueError(f"Threshold file '{THRESHOLD_PATH}' must contain a 'threshold' field.")
+        return float(payload["threshold"])
+
+    return 0.45
+
+
+THRESHOLD = load_threshold()
 
 
 def get_model() -> tf.keras.Model:

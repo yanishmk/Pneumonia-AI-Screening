@@ -21,6 +21,7 @@ Copy these files into the root of your Hugging Face Space:
 - `app.py`
 - `requirements.txt`
 - `pneumonia_cnn_model.keras`
+- `pneumonia_threshold.json` (optional)
 
 ## Notes
 
@@ -32,10 +33,12 @@ Copy these files into the root of your Hugging Face Space:
 - The model is loaded lazily on first analysis to reduce startup pressure.
 - Grad-CAM helper models are cached after the first run for faster repeated analysis.
 - Basic X-ray validation rejects images that are too small, too large, too colorful, or badly framed.
+- If `PREDICTION_THRESHOLD` is not set, the app can load a threshold from `pneumonia_threshold.json`.
 
 ## Optional environment variables
 
 - `MODEL_PATH`
+- `THRESHOLD_PATH`
 - `MODEL_IMAGE_SIZE`
 - `PREDICTION_THRESHOLD`
 - `GRADCAM_LAYER`

@@ -8,6 +8,20 @@ backend/pneumonia_cnn_model.keras
 
 Or set `MODEL_PATH` to an absolute or relative path.
 
+You can also provide an optional threshold file:
+
+```text
+backend/pneumonia_threshold.json
+```
+
+Expected format:
+
+```json
+{
+  "threshold": 0.41
+}
+```
+
 For this project, the expected model is the one exported from your notebook
 `xray_pneumonia_final_(4) (2).ipynb`.
 
@@ -63,6 +77,7 @@ Recommended settings:
 Recommended environment variables:
 
 - `MODEL_PATH=pneumonia_cnn_model.keras`
+- `THRESHOLD_PATH=pneumonia_threshold.json`
 - `MODEL_IMAGE_SIZE=150`
 - `PREDICTION_THRESHOLD=0.45`
 - `FLASK_DEBUG=0`
@@ -71,3 +86,4 @@ Notes:
 
 - Railway injects the `PORT` variable automatically.
 - The model now loads lazily on the first prediction request to reduce startup pressure.
+- If `PREDICTION_THRESHOLD` is not set, the backend will try to read the threshold from `THRESHOLD_PATH`.
