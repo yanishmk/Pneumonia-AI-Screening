@@ -15,8 +15,11 @@ IMAGE_SIZE = (MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE)
 THRESHOLD = float(os.getenv("PREDICTION_THRESHOLD", "0.45"))
 MODEL_FILENAME = "pneumonia_cnn_model.keras"
 GRADCAM_LAYER = os.getenv("GRADCAM_LAYER")
+MAX_IMAGE_PIXELS = int(os.getenv("MAX_IMAGE_PIXELS", str(12_000_000)))
+MIN_IMAGE_DIMENSION = int(os.getenv("MIN_IMAGE_DIMENSION", "96"))
 
 _MODEL: tf.keras.Model | None = None
+_GRADCAM_MODELS: dict[str, tf.keras.Model] = {}
 
 
 def resolve_model_path() -> Path:
@@ -55,6 +58,16 @@ def get_model() -> tf.keras.Model:
     return _MODEL
 
 
+def get_gradcam_model(layer_name: str) -> tf.keras.Model:
+    cached = _GRADCAM_MODELS.get(layer_name)
+
+    if cached is None:
+        cached = build_gradcam_model(get_model(), layer_name)
+        _GRADCAM_MODELS[layer_name] = cached
+
+    return cached
+
+
 def ensure_uint8(image: np.ndarray) -> np.ndarray:
     if image.dtype == np.uint8:
         return image
@@ -80,8 +93,16 @@ def to_bgr(image: np.ndarray) -> np.ndarray:
 
 def validate_xray_candidate(image_bgr: np.ndarray) -> np.ndarray:
     height, width = image_bgr.shape[:2]
-    if min(height, width) < 96:
+
+    if height * width > MAX_IMAGE_PIXELS:
+        raise gr.Error("The uploaded image is too large to analyze. Please upload a smaller chest X-ray.")
+
+    if min(height, width) < MIN_IMAGE_DIMENSION:
         raise gr.Error("The image is too small. Please upload a clearer chest X-ray.")
+
+    aspect = width / height
+    if aspect < 0.55 or aspect > 1.65:
+        raise gr.Error("This image does not look like a frontal chest X-ray.")
 
     gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
     sampled = cv2.resize(gray, (256, 256), interpolation=cv2.INTER_AREA)
@@ -99,6 +120,9 @@ def validate_xray_candidate(image_bgr: np.ndarray) -> np.ndarray:
     )
 
     contrast = float(np.percentile(sampled, 95) - np.percentile(sampled, 5))
+    flat = sampled.flatten().astype(np.float32)
+    dark_ratio = float(np.mean(flat < 85))
+    bright_ratio = float(np.mean(flat > 155))
     edge_ratio = float(np.count_nonzero(cv2.Canny(sampled, 50, 150)) / sampled.size)
 
     if color_delta > 14.0:
@@ -108,6 +132,9 @@ def validate_xray_candidate(image_bgr: np.ndarray) -> np.ndarray:
 
     if contrast < 28.0 or edge_ratio < 0.01:
         raise gr.Error("This image is not a usable chest X-ray. Please upload a clearer chest radiograph.")
+
+    if dark_ratio < 0.10 or bright_ratio < 0.05:
+        raise gr.Error("This image does not match the expected intensity profile of a chest X-ray.")
 
     return gray
 
@@ -187,7 +214,7 @@ def generate_gradcam_overlay(grayscale: np.ndarray, target_class: int | None = N
     model = get_model()
     preprocessed = preprocess_grayscale_image(grayscale)
     layer_name = GRADCAM_LAYER or get_last_conv_layer_name(model)
-    grad_model = build_gradcam_model(model, layer_name)
+    grad_model = get_gradcam_model(layer_name)
 
     with tf.GradientTape() as tape:
         conv_outputs, predictions = grad_model(preprocessed, training=False)
@@ -256,9 +283,10 @@ def analyze_image(image: np.ndarray | None) -> tuple[str, str, str, str, str, np
     confidence_text = f"{confidence * 100:.1f}% ({confidence_label(confidence)})"
     suspicion_text = f"{suspicion_score * 100:.1f}%"
     triage_text = triage_label(predicted_class, confidence)
+    label_text = f"{label} (threshold {THRESHOLD:.2f})"
     return (
         summary,
-        label,
+        label_text,
         suspicion_text,
         confidence_text,
         triage_text,
@@ -285,6 +313,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Pneumonia AI Screening") as demo:
             2. Click **Run analysis**.
             3. Review the prediction summary and the Grad-CAM attention map.
 
+            Supported images should look like frontal grayscale chest radiographs.
             Non X-ray images are rejected with a clear message.
             """
         )
@@ -314,6 +343,11 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Pneumonia AI Screening") as demo:
         """
         **Disclaimer:** This demo was developed for educational purposes only.
         It does not provide a medical diagnosis and does not replace a radiologist or physician.
+
+        Technical defaults:
+        - image size: `150 x 150`
+        - threshold: `0.45`
+        - class mapping: `0 = Pneumonia`, `1 = Normal`
         """
     )
 
