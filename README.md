@@ -6,7 +6,7 @@ Pneumonia AI Screening
 
 ## Description
 
-Pneumonia AI Screening is primarily a deep learning study project built around the notebook `xray_pneumonia_final-project (4).ipynb`.
+Pneumonia AI Screening is primarily a deep learning study project built around the notebook `xray_pneumonia.ipynb`.
 
 The core of the project is a complete notebook workflow for chest X-ray classification:
 
@@ -39,7 +39,7 @@ The web application in this repository is an extension of that notebook work. It
   - `pneumonia_threshold.json`
 - Example notebook sections for prediction and simple Flask deployment
 
-Notebook highlights from `xray_pneumonia_final-project (4).ipynb`:
+Notebook highlights from `xray_pneumonia.ipynb`:
 
 - Original train distribution:
   - `1341` Normal
@@ -108,10 +108,23 @@ npm install
 ### Key notebook settings
 
 - CNN image size: `150 x 150`
-- GAN image size: `128 x 128`
-- GAN epochs: `200`
+- GAN image size: `64 x 64`
+- GAN epochs: `350`
 - CNN epochs: `50`
 - Threshold selected from test optimization: `0.41`
+
+### Threshold configuration
+
+The deployment code now supports two ways to define the decision threshold:
+
+- set `PREDICTION_THRESHOLD`
+- or provide a `pneumonia_threshold.json` file with:
+
+```json
+{
+  "threshold": 0.41
+}
+```
 
 ### Optional web app usage
 
@@ -162,7 +175,7 @@ pneumonia-ai-workspace/
 
 Main study reference:
 
-- `xray_pneumonia_final-project (4).ipynb`
+- `xray_pneumonia.ipynb`
 
 Repository notebook currently present:
 
@@ -170,7 +183,7 @@ Repository notebook currently present:
 
 ## Example Result
 
-Final results reported in `xray_pneumonia_final-project (4).ipynb`:
+Final results reported in `xray_pneumonia.ipynb`:
 
 | Metric | Value |
 | --- | ---: |
