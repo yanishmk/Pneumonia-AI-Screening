@@ -515,9 +515,15 @@ export default function HomePage() {
     }
   }
 
-  async function postImage<T>(url: string, imageFile: File): Promise<T> {
+  async function postImage<T>(url: string, imageFile: File, extraFields?: Record<string, string>): Promise<T> {
     const formData = new FormData();
     formData.append("file", imageFile);
+
+    if (extraFields) {
+      for (const [key, value] of Object.entries(extraFields)) {
+        formData.append(key, value);
+      }
+    }
 
     const endpoint = PUBLIC_BACKEND_URL ? `${PUBLIC_BACKEND_URL}${url.replace("/api", "")}` : url;
 
@@ -569,7 +575,9 @@ export default function HomePage() {
       setPrediction(predictionResult);
 
       try {
-        const gradcamResult = await postImage<GradcamResult>("/api/gradcam", file);
+        const gradcamResult = await postImage<GradcamResult>("/api/gradcam", file, {
+          target_class: String(predictionResult.predicted_class)
+        });
         setGradcam(gradcamResult);
       } catch (gradcamRequestError) {
         setGradcamError(

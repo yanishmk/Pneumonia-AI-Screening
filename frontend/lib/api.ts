@@ -44,9 +44,27 @@ export function extractUploadedFile(formData: FormData): File | null {
   return file instanceof File ? file : null;
 }
 
-export function buildImageFormData(file: File) {
+export function extractOptionalTextField(formData: FormData, fieldName: string): string | null {
+  const value = formData.get(fieldName);
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export function buildImageFormData(file: File, extraFields?: Record<string, string>) {
   const formData = new FormData();
   formData.append("file", file, file.name);
+
+  if (extraFields) {
+    for (const [key, value] of Object.entries(extraFields)) {
+      formData.append(key, value);
+    }
+  }
+
   return formData;
 }
 

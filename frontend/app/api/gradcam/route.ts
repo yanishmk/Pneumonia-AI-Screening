@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   buildImageFormData,
+  extractOptionalTextField,
   extractUploadedFile,
   fetchWithRetry,
   FLASK_API_URL,
@@ -16,6 +17,7 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const file = extractUploadedFile(formData);
+    const targetClass = extractOptionalTextField(formData, "target_class");
 
     if (!file) {
       return NextResponse.json<ApiError>({ error: "Missing image file." }, { status: 400 });
@@ -34,7 +36,7 @@ export async function POST(request: Request) {
 
     const response = await fetchWithRetry(`${FLASK_API_URL}/gradcam`, {
       method: "POST",
-      body: buildImageFormData(file)
+      body: buildImageFormData(file, targetClass ? { target_class: targetClass } : undefined)
     });
 
     const payload = await readApiPayload<GradcamResult>(response);
