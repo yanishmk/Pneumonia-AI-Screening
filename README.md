@@ -1,77 +1,106 @@
 # Pneumonia AI Screening
 
-## Project Name
+Pneumonia AI Screening is a study and prototyping repository centered on chest X-ray pneumonia classification.
 
-Pneumonia AI Screening
+The main artifact in this repository is the notebook [xray_pneumonia.ipynb](./xray_pneumonia.ipynb), which contains the end-to-end experimentation workflow used to:
 
-## Description
+- download the dataset with KaggleHub,
+- audit the image files and remove corrupted samples,
+- perform exploratory analysis and visualization,
+- split the data into train / validation / test,
+- rebalance the training set with a GAN trained on the minority `Normal` class,
+- train a CNN classifier with data augmentation,
+- evaluate the model with multiple metrics,
+- visualize model behavior with ROC, precision-recall, confusion matrix, and Grad-CAM,
+- export the trained model and result bundle for later deployment.
 
-Pneumonia AI Screening is primarily a deep learning study project built around the notebook `xray_pneumonia_final-project (4).ipynb`.
+## Notebook Workflow
 
-The core of the project is a complete notebook workflow for chest X-ray classification:
+The notebook is organized into the following stages:
 
-- dataset download from Kaggle,
-- exploratory analysis,
-- preprocessing and NumPy loading,
-- real train / validation / test split,
-- GAN-based rebalancing of the minority class (`Normal`),
-- CNN training with data augmentation,
-- threshold optimization on test predictions,
-- model export for later deployment.
+1. imports and configuration
+2. dataset download
+3. utility functions and corrupted-image audit
+4. exploratory analysis and class visualization
+5. NumPy loading of grayscale chest X-ray images
+6. train / validation / test split
+7. GAN training on the minority class
+8. synthetic image generation and train-set rebalancing
+9. CNN training with augmentation
+10. final evaluation and threshold analysis
+11. ROC / PR curves, confusion matrix, and Grad-CAM
+12. model export and ZIP bundle generation
 
-The web application in this repository is an extension of that notebook work. It uses the trained model for prediction and visualization, but the main study and methodology come from the notebook.
+## Current Notebook Features
 
-## Features
-
-- Notebook-first pneumonia detection workflow
-- Chest X-ray binary classification:
+- binary classification:
   - `0 -> Pneumonia`
   - `1 -> Normal`
-- Exploratory data analysis on the X-ray dataset
-- Real train / validation / test split
-- GAN trained on the minority `Normal` class
-- Synthetic `Normal` image generation and injection into the training set
-- CNN classifier with batch normalization, dropout, and binary output
-- Data augmentation before CNN training
-- Automatic search for the best decision threshold on the test set
-- Export of:
+- GAN-based minority-class rebalancing
+- CNN training with batch normalization and dropout
+- data augmentation before final training
+- threshold sweep on test predictions with a weighted selection score:
+  - `0.60 * accuracy + 0.40 * macro_f1`
+- Grad-CAM visualization on test samples
+- export of:
   - `pneumonia_cnn_model.keras`
-  - `pneumonia_threshold.json`
-- Example notebook sections for prediction and simple Flask deployment
+  - `metrics.json`
+  - `classification_report.txt`
+  - `classification_report.json`
+  - `test_predictions.csv`
+  - `confusion_matrix.csv`
+  - `confusion_matrix.png`
+  - `threshold_search.csv`
+  - ZIP archive with the full run bundle
 
-Notebook highlights from `xray_pneumonia_final-project (4).ipynb`:
+## Example Result From The Notebook
 
-- Original train distribution:
-  - `1341` Normal
-  - `3875` Pneumonia
-- Real split:
-  - Train: `4172`
-  - Validation: `1044`
-  - Test: `624`
-- GAN-generated `Normal` images kept after filtering: `429`
-- Final rebalanced train set:
-  - `1502` Normal
-  - `3099` Pneumonia
+The notebook currently reports the following saved test metrics in its output cells:
 
-## Technologies Used
+| Metric | Value |
+| --- | ---: |
+| Accuracy | `92.79%` |
+| Balanced Accuracy | `0.9184` |
+| Macro F1 | `0.9223` |
+| Weighted F1 | `0.9275` |
+| Global Score | `0.9240` |
+| AUC | `0.9633` |
+| Selected Threshold | `0.31` |
+| Threshold Strategy | `0.60 * accuracy + 0.40 * macro_f1` |
 
-- Python
-- TensorFlow / Keras
-- NumPy
-- Pandas
-- OpenCV
-- Matplotlib
-- scikit-learn
-- Pillow
-- KaggleHub
-- Flask
-- Next.js
-- React
-- TypeScript
+Per-class performance shown in the notebook:
+
+- Pneumonia:
+  - Precision: `0.93`
+  - Recall: `0.96`
+  - F1-score: `0.94`
+- Normal:
+  - Precision: `0.92`
+  - Recall: `0.88`
+  - F1-score: `0.90`
+
+These numbers come from the notebook outputs currently stored in the repository and may vary slightly if the notebook is re-run.
+
+## Repository Structure
+
+```text
+pneumonia-ai-workspace/
+  xray_pneumonia.ipynb
+  README.md
+  backend/
+    app.py
+    requirements.txt
+    README.md
+  frontend/
+    ...
+  hf_space/
+    app.py
+    requirements.txt
+```
 
 ## Installation
 
-### Notebook environment
+### Notebook Environment
 
 Install the main Python dependencies used by the notebook:
 
@@ -79,13 +108,13 @@ Install the main Python dependencies used by the notebook:
 pip install tensorflow numpy pandas matplotlib scikit-learn pillow opencv-python kagglehub
 ```
 
-You can run the notebook either in:
+You can run the notebook in:
 
 - Jupyter Notebook
 - JupyterLab
 - Google Colab
 
-### Optional backend setup
+### Optional Backend Setup
 
 ```powershell
 cd backend
@@ -95,7 +124,7 @@ pip install -r requirements.txt
 copy .env.example .env
 ```
 
-### Optional frontend setup
+### Optional Frontend Setup
 
 ```powershell
 cd frontend
@@ -105,37 +134,11 @@ npm install
 
 ## Usage
 
-### Main usage: run the notebook
+### Main Usage
 
-Open `xray_pneumonia_final-project (4).ipynb` and run the cells in order.
+Open `xray_pneumonia.ipynb` and run the cells in order.
 
-The notebook workflow is organized around these stages:
-
-1. imports and configuration
-2. dataset download with KaggleHub
-3. image validation and utility functions
-4. exploratory analysis and visualization
-5. NumPy loading of grayscale X-ray images
-6. real train / validation / test split
-7. GAN training for the minority `Normal` class
-8. synthetic image filtering and injection into the training set
-9. data augmentation
-10. CNN training
-11. final evaluation with multiple metrics
-12. threshold optimization on the test set
-13. model and threshold export
-14. new image prediction example
-15. simple Flask deployment example
-
-### Key notebook settings
-
-- CNN image size: `150 x 150`
-- GAN image size: `128 x 128`
-- GAN epochs: `200`
-- CNN epochs: `50`
-- Threshold selected from test optimization: `0.41`
-
-### Optional web app usage
+### Optional Web App Usage
 
 Run the backend:
 
@@ -152,103 +155,12 @@ cd frontend
 npm run dev
 ```
 
-## Project Structure
+## Notes
 
-```text
-pneumonia-ai-workspace/
-  xray_pneumonia.ipynb
-  backend/
-    app.py
-    requirements.txt
-    .env.example
-    pneumonia_cnn_model.keras
-  frontend/
-    app/
-      api/
-        predict/
-          route.ts
-        gradcam/
-          route.ts
-      globals.css
-      layout.tsx
-      page.tsx
-    lib/
-      types.ts
-    package.json
-    .env.local.example
-  hf_space/
-    app.py
-    requirements.txt
-  README.md
-```
-
-Main study reference:
-
-- `xray_pneumonia_final-project (4).ipynb`
-
-Repository notebook currently present:
-
-- `xray_pneumonia.ipynb`
-
-## Example Result
-
-Final results reported in `xray_pneumonia_final-project (4).ipynb`:
-
-| Metric | Value |
-| --- | ---: |
-| Accuracy | `94.07%` |
-| Balanced Accuracy | `0.9261` |
-| Macro F1 | `0.9353` |
-| Weighted F1 | `0.9400` |
-| AUC | `0.9622` |
-| Best Threshold | `0.41` |
-| Global Score | `0.9355` |
-
-Per-class performance:
-
-- Pneumonia:
-  - Precision: `0.93`
-  - Recall: `0.98`
-  - F1-score: `0.95`
-- Normal:
-  - Precision: `0.97`
-  - Recall: `0.87`
-  - F1-score: `0.92`
-
-Example exported prediction format:
-
-```json
-{
-  "label": "Normal",
-  "predicted_class": 1,
-  "probability_normal": 0.92,
-  "threshold": 0.41
-}
-```
-
-## Contribution
-
-Contributions are welcome, especially for:
-
-- improving the notebook methodology,
-- improving GAN training stability,
-- testing alternative CNN architectures,
-- improving evaluation and threshold selection,
-- cleaning notebook outputs and documentation,
-- improving deployment around the trained notebook model.
-
-If you contribute, please work from a separate branch and open a pull request.
-
-## License
-
-No formal open-source license file has been added yet.
-
-At the moment, this repository should be considered an educational and academic-style project centered on notebook experimentation and model prototyping.
+- This repository is an educational deep-learning project, not a clinical diagnostic device.
+- The notebook remains the primary source of truth for the model-building methodology.
+- The web application extends the notebook work for deployment and interaction.
 
 ## Author
 
 - Amira Djidjeli
-- Lounes Djayet
-- Yanis Hamek
-- Yanisse Touazi
-- Younes Aibeche
